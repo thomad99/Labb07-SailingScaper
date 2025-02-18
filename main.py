@@ -2,10 +2,9 @@ from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import os
-from chatbot import app as chatbot_app, SessionLocal
-from scrape_race_results import SailingRaceScraper, Base, engine
-from config import SCRAPE_BASE_URL
-from sqlalchemy.orm import Session
+from chatbot import app as chatbot_app
+from scrape_race_results import SailingRaceScraper
+from database import Base, engine, SessionLocal
 from sqlalchemy import func
 
 app = FastAPI()
@@ -18,6 +17,12 @@ app.mount("/api", chatbot_app)
 
 # Set up templates
 templates = Jinja2Templates(directory="templates")
+
+# Try to import from config, fall back to environment variables if config is missing
+try:
+    from config import SCRAPE_BASE_URL
+except ImportError:
+    SCRAPE_BASE_URL = os.getenv("SCRAPE_BASE_URL", "https://example-sailing-results.com/results")
 
 def run_scraper():
     scraper = SailingRaceScraper(SCRAPE_BASE_URL)
