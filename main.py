@@ -31,8 +31,12 @@ def run_scraper():
 @app.post("/trigger-scrape")
 async def trigger_scrape(background_tasks: BackgroundTasks):
     """Endpoint to trigger the scraping process"""
-    background_tasks.add_task(run_scraper)
-    return {"message": "Scraping process started in background"}
+    scraper = SailingRaceScraper(SCRAPE_BASE_URL)
+    summary = scraper.scrape_all_results()
+    return {
+        "message": "Scraping process completed",
+        "summary": summary
+    }
 
 @app.get("/scrape-status")
 async def scrape_status():
