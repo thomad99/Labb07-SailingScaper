@@ -38,15 +38,28 @@
     <script>
         async function startScrape() {
             try {
+                document.getElementById('scrapeStatus').textContent = 'Starting scrape...';
                 const response = await fetch('/trigger-scrape', {
                     method: 'POST'
                 });
                 const data = await response.json();
-                document.getElementById('scrapeStatus').textContent = data.message;
+                
+                // Format summary
+                let summaryText = `
+Scraping completed!
+${data.summary.total_races} races found
+${data.summary.total_results} total results
+${data.summary.categories.length} categories found
+
+Categories:
+${data.summary.categories.join('\n')}
+                `;
+                
+                document.getElementById('scrapeStatus').textContent = summaryText;
                 document.getElementById('scrapeStatus').className = 'status success';
                 
-                // Start polling for status
-                pollStatus();
+                // Refresh database status
+                loadDBStatus();
             } catch (error) {
                 document.getElementById('scrapeStatus').textContent = 'Error starting scrape: ' + error;
                 document.getElementById('scrapeStatus').className = 'status error';
@@ -82,4 +95,4 @@
         loadDBStatus();
     </script>
 </body>
-</html>
+</html> 
