@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 import time
 import json
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from urllib.parse import urljoin, urlparse
@@ -28,12 +28,23 @@ class Sailor(Base):
     age_category = Column(String)
     results = relationship("RaceResult", back_populates="sailor")
 
+class RaceCategory(Base):
+    __tablename__ = 'race_categories'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)  # e.g., "Sunfish", "M15", "E Scow", etc.
+    races = relationship("Race", back_populates="category")
+
 class Race(Base):
     __tablename__ = 'races'
     id = Column(Integer, primary_key=True)
-    name = Column(String)
+    name = Column(String)  # e.g., "Summer Series Race 1"
     date = Column(DateTime)
     venue = Column(String)
+    category_id = Column(Integer, ForeignKey('race_categories.id'))
+    event_name = Column(String)  # e.g., "Summer Series 2023"
+    weather_conditions = Column(String, nullable=True)
+    
+    category = relationship("RaceCategory", back_populates="races")
     results = relationship("RaceResult", back_populates="race")
 
 class RaceResult(Base):
@@ -42,8 +53,14 @@ class RaceResult(Base):
     sailor_id = Column(Integer, ForeignKey('sailors.id'))
     race_id = Column(Integer, ForeignKey('races.id'))
     position = Column(Integer)
-    finish_time = Column(Float)  # Store as seconds for easy comparison
+    sail_number = Column(String)  # Added for sail number
     boat_name = Column(String)
+    yacht_club = Column(String)  # Moved from Sailor to RaceResult as it might change
+    points = Column(Float)  # Added for race points
+    total_points = Column(Float)  # Added for total series points
+    finish_time = Column(Float, nullable=True)
+    dnf = Column(Boolean, default=False)
+    dns = Column(Boolean, default=False)
     
     sailor = relationship("Sailor", back_populates="results")
     race = relationship("Race", back_populates="results")
@@ -96,64 +113,101 @@ class SailingRaceScraper:
         races = []
         
         try:
-            # Example selectors - customize these based on the actual website structure
-            race_containers = soup.find_all('div', class_='race-result')
+            # Find all race categories on the page
+            race_sections = soup.find_all('div', class_='race-category')  # Adjust based on actual HTML
             
-            if not race_containers:
-                print(f"No race results found on {url}")
-                return []
-            
-            for race_elem in race_containers:
+            for section in race_sections:
                 try:
-                    # Create Race entry
+                    # Get or create race category
+                    category_name = section.find('h2', class_='category-name').text.strip()
+                    print(f"Processing category: {category_name}")
+                    
+                    category = self.session.query(RaceCategory).filter_by(name=category_name).first()
+                    if not category:
+                        category = RaceCategory(name=category_name)
+                        self.session.add(category)
+                        self.session.flush()
+                    
+                    # Parse race details
+                    race_date = section.find('span', class_='date').text.strip()
+                    event_name = section.find('h1', class_='event-name').text.strip()
+                    
                     race = Race(
-                        name=race_elem.find('h2', class_='race-name').text.strip(),
-                        date=datetime.strptime(
-                            race_elem.find('span', class_='date').text.strip(), 
-                            '%Y-%m-%d'  # Adjust format based on website
-                        ),
-                        venue=race_elem.find('span', class_='venue').text.strip()
+                        name=f"{event_name} - {category_name}",
+                        date=datetime.strptime(race_date, '%Y-%m-%d'),  # Adjust format as needed
+                        venue=section.find('span', class_='venue').text.strip(),
+                        category_id=category.id,
+                        event_name=event_name
                     )
                     self.session.add(race)
                     self.session.flush()
                     
-                    # Parse participant results
-                    for participant in race_elem.find_all('div', class_='participant'):
-                        try:
-                            # Get or create sailor
-                            sailor_name = participant.find('span', class_='skipper').text.strip()
-                            sailor = self.session.query(Sailor).filter_by(name=sailor_name).first()
-                            
-                            if not sailor:
-                                sailor = Sailor(
-                                    name=sailor_name,
-                                    club=participant.find('span', class_='club').text.strip(),
-                                    age_category=participant.find('span', class_='category').text.strip()
+                    # Find results table
+                    results_table = section.find('table', class_='results')  # Adjust selector
+                    if results_table:
+                        # Process table headers to identify columns
+                        headers = []
+                        for th in results_table.find_all('th'):
+                            headers.append(th.text.strip().lower())
+                        
+                        # Process each row in the results table
+                        for row in results_table.find_all('tr', class_='participant'):
+                            try:
+                                # Get all cells in the row
+                                cells = row.find_all('td')
+                                if len(cells) < 4:  # Minimum required columns
+                                    continue
+                                
+                                # Extract data using column positions
+                                data = {}
+                                for i, cell in enumerate(cells):
+                                    data[headers[i]] = cell.text.strip()
+                                
+                                # Handle position and DNF/DNS
+                                pos_text = data.get('pos', '').upper()
+                                dnf = 'DNF' in pos_text
+                                dns = 'DNS' in pos_text
+                                position = None if (dnf or dns) else int(pos_text)
+                                
+                                # Get or create sailor
+                                sailor_name = data.get('skipper', '')
+                                sailor = self.session.query(Sailor).filter_by(name=sailor_name).first()
+                                if not sailor:
+                                    sailor = Sailor(
+                                        name=sailor_name,
+                                        club=data.get('yacht club', ''),
+                                        age_category=data.get('category', '')
+                                    )
+                                    self.session.add(sailor)
+                                    self.session.flush()
+                                
+                                # Create race result
+                                result = RaceResult(
+                                    sailor_id=sailor.id,
+                                    race_id=race.id,
+                                    position=position,
+                                    sail_number=data.get('sail', ''),
+                                    boat_name=data.get('boat', ''),
+                                    yacht_club=data.get('yacht club', ''),
+                                    points=float(data.get('results', 0)) if data.get('results', '').replace('.', '').isdigit() else None,
+                                    total_points=float(data.get('total points', 0)) if data.get('total points', '').replace('.', '').isdigit() else None,
+                                    dnf=dnf,
+                                    dns=dns
                                 )
-                                self.session.add(sailor)
-                                self.session.flush()
-                            
-                            # Create race result
-                            result = RaceResult(
-                                sailor_id=sailor.id,
-                                race_id=race.id,
-                                position=int(participant.find('span', class_='position').text.strip()),
-                                finish_time=self.parse_time_to_seconds(
-                                    participant.find('span', class_='time').text.strip()
-                                ),
-                                boat_name=participant.find('span', class_='boat-name').text.strip()
-                            )
-                            self.session.add(result)
-                            
-                        except Exception as e:
-                            print(f"Error parsing participant in race {race.name}: {e}")
-                            continue
-                    
-                    self.session.commit()
-                    races.append(race)
+                                self.session.add(result)
+                                print(f"Added result for {sailor_name} in {race.name}")
+                                
+                            except Exception as e:
+                                print(f"Error parsing result row: {e}")
+                                continue
+                        
+                        self.session.commit()
+                        races.append(race)
+                    else:
+                        print(f"No results table found for {category_name}")
                     
                 except Exception as e:
-                    print(f"Error parsing race on {url}: {e}")
+                    print(f"Error parsing race category: {e}")
                     self.session.rollback()
                     continue
                     
@@ -177,6 +231,9 @@ class SailingRaceScraper:
     def scrape_all_results(self):
         """Main function to scrape all race results recursively"""
         urls_to_visit = {self.base_url}
+        total_races = 0
+        total_results = 0
+        categories_found = set()
         
         while urls_to_visit:
             current_url = urls_to_visit.pop()
@@ -185,13 +242,42 @@ class SailingRaceScraper:
             html = self.get_page(current_url)
             if html:
                 # Parse results from current page
-                self.parse_race_results(html, current_url)
+                races = self.parse_race_results(html, current_url)
+                total_races += len(races)
+                
+                # Count results and categories
+                for race in races:
+                    categories_found.add(race.category.name)
+                    total_results += len(race.results)
                 
                 # Find new links to follow
                 new_links = self.extract_links(html, current_url)
                 urls_to_visit.update(new_links)
             
             print(f"Processed {len(self.visited_urls)} pages, {len(urls_to_visit)} remaining")
+        
+        # Print final summary
+        print("\n=== Scraping Summary ===")
+        print(f"Pages processed: {len(self.visited_urls)}")
+        print(f"Total races found: {total_races}")
+        print(f"Total race results: {total_results}")
+        print(f"Race categories found: {len(categories_found)}")
+        print("\nCategories:")
+        for category in sorted(categories_found):
+            # Get count of results for this category
+            category_results = self.session.query(RaceResult)\
+                .join(Race)\
+                .join(RaceCategory)\
+                .filter(RaceCategory.name == category)\
+                .count()
+            print(f"- {category}: {category_results} results")
+        
+        return {
+            'pages_processed': len(self.visited_urls),
+            'total_races': total_races,
+            'total_results': total_results,
+            'categories': list(categories_found)
+        }
 
 if __name__ == "__main__":
     scraper = SailingRaceScraper(SCRAPE_BASE_URL)
