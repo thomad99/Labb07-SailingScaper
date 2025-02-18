@@ -8,8 +8,11 @@ import os
 
 app = FastAPI()
 
-# Configure database
-DB_URL = "postgresql://username:password@localhost:5432/sailing_results"
+# Update database configuration to use environment variables
+DB_URL = os.getenv("DATABASE_URL", "postgresql://username:password@localhost:5432/sailing_results")
+if DB_URL.startswith("postgres://"):  # Handle Render's DATABASE_URL format
+    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
+
 engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(bind=engine)
 
@@ -79,3 +82,5 @@ async def ask_question(query: Query):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))chatbot.py
+
+
