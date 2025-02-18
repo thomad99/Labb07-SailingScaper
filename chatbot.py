@@ -5,19 +5,21 @@ from sqlalchemy.orm import sessionmaker
 import openai
 from typing import Optional
 import os
+from database import engine, SessionLocal
 
 app = FastAPI()
 
-# Configure database
-DB_URL = os.getenv("DATABASE_URL", "postgresql://username:password@localhost:5432/sailing_results")
-if DB_URL.startswith("postgres://"):  # Handle Render's DATABASE_URL format
-    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
-
-engine = create_engine(DB_URL)
-SessionLocal = sessionmaker(bind=engine)
+# Try to import from config, fall back to environment variables if config is missing
+try:
+    from config import DB_URL, OPENAI_API_KEY
+except ImportError:
+    DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/sailing_results")
+    if DB_URL.startswith("postgres://"):
+        DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Configure OpenAI
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
 class Query(BaseModel):
     question: str
