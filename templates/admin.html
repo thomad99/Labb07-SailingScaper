@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sailing Results Admin</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sailing Results Admin</h1>
+    <div>
+        <h2>Database Status</h2>
+        <pre id="dbStatus"></pre>
+        
+        <h2>Scraper Control</h2>
+        <button onclick="startScrape()">Start Scraping</button>
+        <div id="scrapeStatus" class="status"></div>
+    </div>
+
+    <script>
+        async function startScrape() {
+            try {
+                const response = await fetch('/trigger-scrape', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                document.getElementById('scrapeStatus').textContent = data.message;
+                document.getElementById('scrapeStatus').className = 'status success';
+                
+                // Start polling for status
+                pollStatus();
+            } catch (error) {
+                document.getElementById('scrapeStatus').textContent = 'Error starting scrape: ' + error;
+                document.getElementById('scrapeStatus').className = 'status error';
+            }
+        }
+
+        async function pollStatus() {
+            try {
+                const response = await fetch('/scrape-status');
+                const data = await response.json();
+                document.getElementById('scrapeStatus').textContent = 'Scrape status: ' + data.status;
+                
+                if (data.status === 'running') {
+                    setTimeout(pollStatus, 5000); // Poll every 5 seconds
+                }
+            } catch (error) {
+                document.getElementById('scrapeStatus').textContent = 'Error checking status: ' + error;
+                document.getElementById('scrapeStatus').className = 'status error';
+            }
+        }
+
+        // Load initial database status
+        async function loadDBStatus() {
+            try {
+                const response = await fetch('/db-status');
+                const data = await response.json();
+                document.getElementById('dbStatus').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('dbStatus').textContent = 'Error loading DB status: ' + error;
+            }
+        }
+
+        loadDBStatus();
+    </script>
+</body>
+</html>
