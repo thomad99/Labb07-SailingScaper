@@ -8,9 +8,17 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from urllib.parse import urljoin, urlparse
-from config import DB_URL, SCRAPE_BASE_URL
+import os
+from database import Base, engine, SessionLocal
 
-Base = declarative_base()
+# Try to import from config, fall back to environment variables if config is missing
+try:
+    from config import DB_URL, SCRAPE_BASE_URL
+except ImportError:
+    DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/sailing_results")
+    if DB_URL.startswith("postgres://"):
+        DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
+    SCRAPE_BASE_URL = os.getenv("SCRAPE_BASE_URL", "https://example-sailing-results.com/results")
 
 class Sailor(Base):
     __tablename__ = 'sailors'
@@ -41,14 +49,11 @@ class RaceResult(Base):
     race = relationship("Race", back_populates="results")
 
 class SailingRaceScraper:
-    def __init__(self, base_url, db_url=DB_URL):
+    def __init__(self, base_url):
         self.base_url = base_url
         self.domain = urlparse(base_url).netloc
         self.visited_urls = set()
-        self.engine = create_engine(db_url)
-        Base.metadata.create_all(self.engine)
-        Session = sessionmaker(bind=self.engine)
-        self.session = Session()
+        self.session = SessionLocal()
 
     def get_page(self, url):
         """Fetch page content with error handling and rate limiting"""
