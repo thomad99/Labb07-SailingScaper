@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import os
-from chatbot import app as chatbot_app
+from chatbot import app as chatbot_app, SessionLocal
 from scrape_race_results import SailingRaceScraper, Base, engine
 from config import SCRAPE_BASE_URL
 from sqlalchemy.orm import Session
