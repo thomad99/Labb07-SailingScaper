@@ -22,6 +22,21 @@
             background-color: #f8d7da;
             color: #721c24;
         }
+        .button-group {
+            margin: 20px 0;
+        }
+        .stop-button {
+            background-color: #dc3545;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .stop-button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -31,14 +46,20 @@
         <pre id="dbStatus"></pre>
         
         <h2>Scraper Control</h2>
-        <button onclick="startScrape()">Start Scraping</button>
+        <div class="button-group">
+            <button onclick="startScrape()" id="startButton">Start Scraping</button>
+            <button onclick="stopScrape()" id="stopButton" class="stop-button" disabled>Stop Scraping</button>
+        </div>
         <div id="scrapeStatus" class="status"></div>
     </div>
 
     <script>
         async function startScrape() {
             try {
-                document.getElementById('scrapeStatus').textContent = 'Starting scrape...';
+                document.getElementById('scrapeStatus').textContent = 'Starting scrape of single URL...';
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('stopButton').disabled = false;
+                
                 const response = await fetch('/trigger-scrape', {
                     method: 'POST'
                 });
@@ -47,9 +68,11 @@
                 // Format summary
                 let summaryText = `
 Scraping completed!
+URL: ${data.summary.url_processed}
 ${data.summary.total_races} races found
 ${data.summary.total_results} total results
 ${data.summary.categories.length} categories found
+Time taken: ${data.summary.elapsed_time}
 
 Categories:
 ${data.summary.categories.join('\n')}
@@ -60,9 +83,27 @@ ${data.summary.categories.join('\n')}
                 
                 // Refresh database status
                 loadDBStatus();
+                
+                document.getElementById('startButton').disabled = false;
+                document.getElementById('stopButton').disabled = true;
             } catch (error) {
-                document.getElementById('scrapeStatus').textContent = 'Error starting scrape: ' + error;
-                document.getElementById('scrapeStatus').className = 'status error';
+                document.getElementById('scrapeStatus').textContent = 'Error: ' + error;
+                document.getElementById('startButton').disabled = false;
+                document.getElementById('stopButton').disabled = true;
+            }
+        }
+
+        async function stopScrape() {
+            try {
+                const response = await fetch('/stop-scrape', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                document.getElementById('scrapeStatus').textContent = data.message;
+                document.getElementById('startButton').disabled = false;
+                document.getElementById('stopButton').disabled = true;
+            } catch (error) {
+                document.getElementById('scrapeStatus').textContent = 'Error stopping scrape: ' + error;
             }
         }
 
