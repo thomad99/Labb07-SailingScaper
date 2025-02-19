@@ -132,7 +132,7 @@ class SailingRaceScraper:
         return links
 
     def parse_race_results(self, html, url):
-        """Parse race results from HTML content"""
+        """Parse race results from Regatta Network"""
         soup = BeautifulSoup(html, 'html.parser')
         races = []
         
@@ -140,132 +140,62 @@ class SailingRaceScraper:
             print("\n=== Page Content Analysis ===")
             print(f"URL being processed: {url}")
             
-            # Print the first part of HTML to see what we're working with
-            print("\nFirst 500 characters of HTML:")
-            print(html[:500])
+            # For Regatta Network, look for the main results table
+            results_table = soup.find('table', {'class': 'results'}) or soup.find('table')
             
-            # Try to find race data with different possible selectors
-            race_sections = []
-            possible_selectors = [
-                'div.race-category',  # Original selector
-                'div.race',           # Alternative
-                'table.results',      # Direct table
-                'table',              # Any table
-            ]
-            
-            for selector in possible_selectors:
-                elements = soup.select(selector)
-                if elements:
-                    print(f"\nFound {len(elements)} elements with selector: {selector}")
-                    race_sections = elements
-                    break
-            
-            if not race_sections:
-                print("\nNo race sections found. Available classes in HTML:")
-                for tag in soup.find_all(class_=True):
-                    print(f"Tag: {tag.name}, Classes: {tag['class']}")
-            
-            for section in race_sections:
-                try:
-                    # Try to find race category
-                    category_name = None
-                    for selector in ['h2.category-name', 'h2', 'th', 'caption']:
-                        element = section.select_one(selector)
-                        if element:
-                            category_name = element.text.strip()
-                            print(f"\nFound category: {category_name}")
-                            break
-                    
-                    if not category_name:
-                        category_name = "Uncategorized"
-                        print("\nNo category found, using 'Uncategorized'")
-                    
-                    # Get or create race category
-                    category = self.session.query(RaceCategory).filter_by(name=category_name).first()
-                    if not category:
-                        category = RaceCategory(name=category_name)
-                        self.session.add(category)
-                        self.session.flush()
-                    
-                    # Try to find date
-                    date_text = None
-                    date_patterns = [
-                        r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
-                        r'\d{2}/\d{2}/\d{4}',   # MM/DD/YYYY
-                        r'\w+ \d{1,2},? \d{4}'  # Month DD, YYYY
-                    ]
-                    
-                    for pattern in date_patterns:
-                        matches = re.findall(pattern, str(section))
-                        if matches:
-                            date_text = matches[0]
-                            print(f"Found date: {date_text}")
-                            break
-                    
-                    race_date = datetime.now() if not date_text else self.parse_date(date_text)
-                    
-                    # Create race
-                    race = Race(
-                        name=f"Race - {category_name} - {race_date.strftime('%Y-%m-%d')}",
-                        date=race_date,
-                        venue="Unknown",  # We can enhance this later
-                        category_id=category.id,
-                        event_name=category_name
-                    )
-                    self.session.add(race)
+            if results_table:
+                print("\nFound results table")
+                
+                # Try to find event name and date from the page header
+                event_name = soup.find('h1') or soup.find('title')
+                event_name = event_name.text.strip() if event_name else "Unknown Event"
+                
+                # Look for date in the text
+                date_pattern = r'(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}'
+                date_match = re.search(date_pattern, html)
+                race_date = datetime.strptime(date_match.group(), '%B %d, %Y') if date_match else datetime.now()
+                
+                # Get headers from the first row
+                headers = []
+                header_row = results_table.find('tr')
+                if header_row:
+                    for th in header_row.find_all(['th', 'td']):
+                        headers.append(th.text.strip().lower())
+                
+                print(f"Found headers: {headers}")
+                
+                # Create a race category based on the event name
+                category_name = event_name.split('-')[0].strip()
+                category = self.session.query(RaceCategory).filter_by(name=category_name).first()
+                if not category:
+                    category = RaceCategory(name=category_name)
+                    self.session.add(category)
                     self.session.flush()
-                    
-                    # Find results - look for table or structured data
-                    results_data = []
-                    if section.name == 'table':
-                        results_table = section
-                    else:
-                        results_table = section.find('table')
-                    
-                    if results_table:
-                        print("\nFound results table")
-                        # Get headers
-                        headers = []
-                        for th in results_table.find_all(['th', 'td']):
-                            headers.append(th.text.strip().lower())
-                            if len(headers) > 0:  # Found header row
-                                break
-                        
-                        print(f"Table headers found: {headers}")
-                        
-                        # Process rows
-                        for row in results_table.find_all('tr'):
-                            cells = row.find_all('td')
-                            if len(cells) >= len(headers):  # Skip header row
-                                row_data = {}
-                                for i, cell in enumerate(cells):
-                                    if i < len(headers):
-                                        row_data[headers[i]] = cell.text.strip()
-                                results_data.append(row_data)
-                        
-                        print(f"Found {len(results_data)} result rows")
-                    
-                    # Process results
-                    for data in results_data:
+                
+                # Create the race
+                race = Race(
+                    name=event_name,
+                    date=race_date,
+                    venue="Unknown",
+                    category_id=category.id,
+                    event_name=event_name
+                )
+                self.session.add(race)
+                self.session.flush()
+                
+                # Process each row of results
+                for row in results_table.find_all('tr')[1:]:  # Skip header row
+                    cells = row.find_all('td')
+                    if len(cells) >= len(headers):
                         try:
-                            # Try to find position and sailor name in the data
-                            position = None
-                            sailor_name = None
+                            data = {}
+                            for i, cell in enumerate(cells):
+                                if i < len(headers):
+                                    data[headers[i]] = cell.text.strip()
                             
-                            # Look for position
-                            for key in ['pos', 'position', 'place', 'finish']:
-                                if key in data:
-                                    try:
-                                        position = int(data[key])
-                                        break
-                                    except ValueError:
-                                        continue
-                            
-                            # Look for sailor name
-                            for key in ['skipper', 'sailor', 'name', 'competitor']:
-                                if key in data:
-                                    sailor_name = data[key]
-                                    break
+                            # Get position and sailor name
+                            position = int(data.get('position', data.get('pos', '0'))) if data.get('position', data.get('pos', '0')).isdigit() else None
+                            sailor_name = data.get('skipper', data.get('helm', data.get('name', '')))
                             
                             if sailor_name:
                                 # Create or get sailor
@@ -273,8 +203,8 @@ class SailingRaceScraper:
                                 if not sailor:
                                     sailor = Sailor(
                                         name=sailor_name,
-                                        club=data.get('club', data.get('yacht club', '')),
-                                        age_category=data.get('category', '')
+                                        club=data.get('club', ''),
+                                        age_category=''
                                     )
                                     self.session.add(sailor)
                                     self.session.flush()
@@ -284,29 +214,27 @@ class SailingRaceScraper:
                                     sailor_id=sailor.id,
                                     race_id=race.id,
                                     position=position,
-                                    sail_number=data.get('sail', ''),
+                                    sail_number=data.get('sail', data.get('sail #', '')),
                                     boat_name=data.get('boat', ''),
-                                    yacht_club=data.get('yacht club', data.get('club', '')),
-                                    points=None,  # We can enhance this later
-                                    total_points=None
+                                    yacht_club=data.get('club', ''),
+                                    points=float(data.get('points', 0)) if data.get('points', '').replace('.', '').isdigit() else None,
+                                    total_points=float(data.get('total', 0)) if data.get('total', '').replace('.', '').isdigit() else None
                                 )
                                 self.session.add(result)
                                 print(f"Added result for {sailor_name}")
                         
                         except Exception as e:
-                            print(f"Error processing result row: {e}")
+                            print(f"Error processing row: {e}")
                             continue
-                    
-                    self.session.commit()
-                    races.append(race)
-                    
-                except Exception as e:
-                    print(f"Error processing race section: {e}")
-                    self.session.rollback()
-                    continue
+                
+                self.session.commit()
+                races.append(race)
+                
+            else:
+                print("No results table found on page")
                 
         except Exception as e:
-            print(f"Error parsing page {url}: {e}")
+            print(f"Error parsing page: {e}")
             self.session.rollback()
         
         return races
