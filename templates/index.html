@@ -1,87 +1,67 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Sailing Results Chatbot</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .chat-container {
-            border: 1px solid #ccc;
-            padding: 20px;
-            height: 400px;
-            overflow-y: auto;
-            margin-bottom: 20px;
-        }
-        .message {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 5px;
-        }
-        .user-message {
-            background-color: #e3f2fd;
-            margin-left: 20%;
-        }
-        .bot-message {
-            background-color: #f5f5f5;
-            margin-right: 20%;
-        }
-        input[type="text"] {
-            width: 80%;
-            padding: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-    <h1>Sailing Results Chatbot</h1>
-    <div class="chat-container" id="chat-container"></div>
-    <div>
-        <input type="text" id="question" placeholder="Ask about sailing results...">
-        <button onclick="askQuestion()">Send</button>
-    </div>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sailing Race Results Scraper</title>
     <script>
-        async function askQuestion() {
-            const question = document.getElementById('question').value;
-            if (!question) return;
+        async function fetchResults() {
+            let url = document.getElementById("url").value;
+            if (!url) {
+                alert("Please enter a valid URL.");
+                return;
+            }
 
-            // Add user message
-            addMessage(question, 'user');
-            document.getElementById('question').value = '';
+            document.getElementById("status").innerText = "Fetching results from ChatGPT...";
+            
+            let response = await fetch("/fetch-results", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: url })
+            });
 
-            try {
-                const response = await fetch('/api/ask', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ question: question }),
-                });
-                const data = await response.json();
-                addMessage(data.response, 'bot');
-            } catch (error) {
-                addMessage('Sorry, there was an error processing your request.', 'bot');
+            let data = await response.json();
+            if (data.csv_data) {
+                document.getElementById("csv_output").value = data.csv_data;
+                document.getElementById("status").innerText = "Data fetched successfully!";
+            } else {
+                document.getElementById("status").innerText = "Error fetching data: " + data.error;
             }
         }
 
-        function addMessage(text, sender) {
-            const container = document.getElementById('chat-container');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}-message`;
-            messageDiv.textContent = text;
-            container.appendChild(messageDiv);
-            container.scrollTop = container.scrollHeight;
+        async function sendToDB() {
+            let csv_data = document.getElementById("csv_output").value;
+            if (!csv_data) {
+                alert("No data available to send.");
+                return;
+            }
+
+            document.getElementById("status").innerText = "Sending data to database...";
+            
+            let response = await fetch("/send-to-db", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ csv_data: csv_data })
+            });
+
+            let data = await response.json();
+            document.getElementById("status").innerText = data.message || "Error: " + data.error;
         }
     </script>
+</head>
+<body>
+    <h2>Sailing Race Results Scraper</h2>
+    
+    <label for="url">Enter Regatta URL:</label>
+    <input type="text" id="url" placeholder="https://www.example.com/results">
+    <button onclick="fetchResults()">Fetch from ChatGPT</button>
+    
+    <h3>Fetched CSV Data</h3>
+    <textarea id="csv_output" rows="10" cols="80"></textarea>
+    
+    <br><br>
+    <button onclick="sendToDB()">Send to Database</button>
+    
+    <p id="status"></p>
 </body>
-</html> 
+</html>
