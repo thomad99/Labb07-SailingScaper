@@ -1,5 +1,4 @@
 import os
-import subprocess
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -7,35 +6,20 @@ from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import time
 
-def install_chrome():
-    """Download and configure Chromium manually for Render."""
-    CHROME_PATH = "/usr/bin/chromium-browser"
-
-    if not os.path.exists(CHROME_PATH):
-        print("🔧 Downloading Chromium...")
-
-        subprocess.run(
-            "wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb",
-            shell=True,
-            check=True,
-        )
-        subprocess.run("dpkg -x google-chrome-stable_current_amd64.deb /tmp/", shell=True, check=True)
-        subprocess.run("mv /tmp/opt/google/chrome/chrome /usr/bin/chromium-browser", shell=True, check=True)
-        print("✅ Chromium installed successfully!")
+# ✅ Define Chromium path (Use Render-compatible path)
+CHROMIUM_PATH = "/usr/bin/chromium-browser"
 
 def scrape_regatta_page(url):
     """Use Selenium to scrape dynamically loaded race results."""
     print(f"🔍 Fetching URL: {url} using Selenium")
 
-    # ✅ Install Chrome if not found
-    install_chrome()
-
-    # ✅ Set up Selenium WebDriver
+    # ✅ Set up Selenium WebDriver with pre-installed Chromium
     options = Options()
-    options.add_argument("--headless")  # Run without GUI
+    options.add_argument("--headless")  # Run in headless mode
     options.add_argument("--no-sandbox")  # Required for Docker
     options.add_argument("--disable-dev-shm-usage")  # Prevent crashes
-    options.binary_location = "/usr/bin/chromium-browser"
+    options.add_argument("--disable-gpu")  # Disable GPU to reduce memory use
+    options.binary_location = CHROMIUM_PATH  # Use pre-installed Chromium
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
