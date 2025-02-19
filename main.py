@@ -7,16 +7,17 @@ app = Flask(__name__)
 # ✅ Get DATABASE_URL securely from environment variables
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+if not DATABASE_URL:
+    raise ValueError("Missing DATABASE_URL. Set it in Render environment variables.")
+
 # ✅ Create a database engine for PostgreSQL
 engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)
 
-from chatgpt_scraper import app as scraper_app
+# ✅ Import Blueprint from chatgpt_scraper
+from chatgpt_scraper import scraper_bp  
 
-# Mount scraper routes
-app.register_blueprint(scraper_app)
-
-
-
+# ✅ Register Blueprint for scraper routes
+app.register_blueprint(scraper_bp, url_prefix="/api")  # All API calls will be prefixed with /api
 
 @app.route("/")
 def home():
@@ -52,13 +53,10 @@ def query_database():
 
         return jsonify({"answer": formatted_results})
 
-
 @app.route("/chatbot")
 def chatbot():
     """Load the chatbot interface."""
     return render_template("chatbot.html")
-
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=True)
