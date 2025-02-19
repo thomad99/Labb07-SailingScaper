@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-import openai
+from openai import OpenAI
 from typing import Optional
 from database import engine, SessionLocal
 
@@ -18,10 +18,10 @@ if not OPENAI_API_KEY:
     except ImportError:
         raise ValueError("OPENAI_API_KEY not found in environment or config")
 
-print(f"API Key found: {'Yes' if OPENAI_API_KEY else 'No'}")  # Debug print (will not show the actual key)
+print(f"API Key found: {'Yes' if OPENAI_API_KEY else 'No'}")  # Debug print
 
-# Configure OpenAI
-openai.api_key = OPENAI_API_KEY
+# Initialize OpenAI client
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 class Query(BaseModel):
     question: str
@@ -31,7 +31,7 @@ async def health_check():
     """Health check endpoint that also verifies OpenAI API key"""
     try:
         # Test OpenAI connection
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": "test"}],
             max_tokens=5
@@ -62,7 +62,7 @@ def generate_sql_query(question: str) -> str:
         Return only the SQL query, nothing else.
         """
         
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a SQL expert. Generate only SQL queries, no explanations."},
@@ -90,7 +90,7 @@ def format_results(results: list, question: str) -> str:
         If there are no results, please say that no data was found.
         """
         
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant who explains sailing race results clearly."},
