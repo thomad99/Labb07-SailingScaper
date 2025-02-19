@@ -9,15 +9,15 @@ db_url = os.getenv("DATABASE_URL")
 
 def scrape_and_store(url, progress_callback):
     try:
-        progress_callback("Starting scrape for " + url)
+        progress_callback(f"Starting scrape for {url}")
         response = requests.get(url)
         if response.status_code != 200:
             progress_callback("Failed to retrieve the page")
             return
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        regatta_name = soup.find("h2").text.strip()
-        regatta_date = soup.find("h3").text.strip()
+        regatta_name = soup.find("h2").text.strip() if soup.find("h2") else "Unknown Regatta"
+        regatta_date = soup.find("h3").text.strip() if soup.find("h3") else "Unknown Date"
         
         conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
@@ -37,10 +37,14 @@ def scrape_and_store(url, progress_callback):
                          )''')
         conn.commit()
         
-        race_categories = soup.find_all("table")
-        for table in race_categories:
+        tables = soup.find_all("table")
+        race_categories = []
+        total_results = 0
+        for table in tables:
             headers = [th.text.strip() for th in table.find_all("th")]
-            if "Pos" in headers:
+            if "Pos" in headers and "Sail" in headers:
+                race_category = table.find_previous("h4").text.strip() if table.find_previous("h4") else "Unknown Category"
+                race_categories.append(race_category)
                 rows = table.find_all("tr")[1:]
                 for row in rows:
                     cols = row.find_all("td")
@@ -48,15 +52,16 @@ def scrape_and_store(url, progress_callback):
                         cursor.execute('''INSERT INTO regatta_results 
                                           (regatta_name, regatta_date, race_category, pos, sail, boat, skipper, yacht_club, results, total_points)
                                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
-                                       (regatta_name, regatta_date, headers[0], cols[0].text.strip(), cols[1].text.strip(),
+                                       (regatta_name, regatta_date, race_category, cols[0].text.strip(), cols[1].text.strip(),
                                         cols[2].text.strip(), cols[3].text.strip(), cols[4].text.strip(), cols[5].text.strip(),
                                         cols[6].text.strip()))
+                        total_results += 1
         conn.commit()
         cursor.close()
         conn.close()
-        progress_callback("Scraping and storing complete!")
+        progress_callback(f"Scraping and storing complete! Total Results: {total_results}, Categories Found: {len(race_categories)}")
     except Exception as e:
-        progress_callback("Error: " + str(e))
+        progress_callback(f"Error: {str(e)}")
 
 app = Flask(__name__)
 progress_log = []
