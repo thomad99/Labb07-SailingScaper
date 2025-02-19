@@ -1,6 +1,16 @@
 import os
 import subprocess
 
+def save_to_csv(csv_content, filename="race_results.csv"):
+    """Save formatted CSV data and push it to GitHub."""
+    with open(filename, "w", newline="", encoding="utf-8") as file:
+        file.write(csv_content)
+    
+    print(f"✅ CSV saved at {filename}")
+    push_to_github(filename)
+    return filename
+
+
 def push_to_github(filename):
     """Push the saved CSV file to a GitHub repository."""
     
