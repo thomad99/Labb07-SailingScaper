@@ -20,8 +20,15 @@ if not OPENAI_API_KEY:
 
 print(f"API Key found: {'Yes' if OPENAI_API_KEY else 'No'}")  # Debug print
 
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Initialize OpenAI client without proxies
+try:
+    client = OpenAI(
+        api_key=OPENAI_API_KEY,
+        base_url="https://api.openai.com/v1"  # Explicitly set the base URL
+    )
+except Exception as e:
+    print(f"Error initializing OpenAI client: {str(e)}")
+    raise
 
 class Query(BaseModel):
     question: str
@@ -128,3 +135,49 @@ async def ask_question(query: Query):
     except Exception as e:
         print(f"Error processing question: {str(e)}")  # Debug print
         raise HTTPException(status_code=500, detail=str(e)) 
+
+@app.get("/test")
+async def test_connection():
+    """Test endpoint to verify database connection and show basic stats"""
+    try:
+        with SessionLocal() as db:
+            # Get basic counts
+            stats = {
+                "sailors": db.execute(text("SELECT COUNT(*) FROM sailors")).scalar(),
+                "races": db.execute(text("SELECT COUNT(*) FROM races")).scalar(),
+                "results": db.execute(text("SELECT COUNT(*) FROM race_results")).scalar(),
+                "categories": db.execute(text("SELECT COUNT(*) FROM race_categories")).scalar()
+            }
+            
+            # Get sample data
+            recent_races = db.execute(text("""
+                SELECT name, date::text, venue 
+                FROM races 
+                ORDER BY date DESC 
+                LIMIT 3
+            """)).fetchall()
+            
+            # Get categories with counts
+            categories = db.execute(text("""
+                SELECT rc.name, COUNT(r.id) as race_count
+                FROM race_categories rc
+                LEFT JOIN races r ON rc.id = r.category_id
+                GROUP BY rc.name
+                ORDER BY race_count DESC
+            """)).fetchall()
+            
+            return {
+                "status": "connected",
+                "database_stats": stats,
+                "recent_races": [dict(r) for r in recent_races],
+                "categories": [dict(c) for c in categories],
+                "message": "Database connection successful"
+            }
+            
+    except Exception as e:
+        print(f"Database test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "message": "Failed to connect to database"
+        } 
