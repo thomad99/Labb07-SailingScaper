@@ -7,18 +7,17 @@ from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import time
 
-# ✅ Define a reliable Chromium binary location
+# ✅ Define a lightweight Chromium binary location
 CHROMIUM_PATH = "/usr/local/bin/chrome-linux/chrome"
-CHROMEDRIVER_PATH = "/usr/local/bin/chromedriver"
 
 def install_chromium():
-    """Download and configure a portable Chromium binary for Selenium."""
+    """Download and configure a lightweight Chromium binary for Selenium."""
     if not os.path.exists(CHROMIUM_PATH):
         print("🔧 Downloading Chromium Portable...")
 
-        # ✅ Download and extract a stable Chromium version
+        # ✅ Use a smaller, stable Chromium version hosted on a reliable CDN
         subprocess.run(
-            "wget -q https://storage.googleapis.com/chrome-for-testing-public/122.0.6261.128/linux64/chrome-linux.zip -O /tmp/chrome.zip",
+            "wget -q https://github.com/RobRich999/Chromium_Clang/releases/download/v121.0.6167.85/chrome-linux.zip -O /tmp/chrome.zip",
             shell=True,
             check=True,
         )
@@ -32,12 +31,12 @@ def scrape_regatta_page(url):
     # ✅ Install Chromium if not found
     install_chromium()
 
-    # ✅ Set up Selenium WebDriver with the portable Chromium
+    # ✅ Set up Selenium WebDriver with the downloaded Chromium
     options = Options()
     options.add_argument("--headless")  # Run without UI
     options.add_argument("--no-sandbox")  # Required for Render/Docker environments
     options.add_argument("--disable-dev-shm-usage")  # Prevent crashes
-    options.binary_location = CHROMIUM_PATH  # ✅ Use the manually installed Chromium
+    options.binary_location = CHROMIUM_PATH  # ✅ Use the downloaded Chromium
 
     # ✅ Use the correct ChromeDriver
     service = Service(ChromeDriverManager().install())
