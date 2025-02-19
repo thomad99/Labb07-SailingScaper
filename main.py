@@ -1,42 +1,48 @@
 from flask import Flask, render_template, request, jsonify
-from chatgpt_scraper import fetch_race_results_from_chatgpt, send_to_db
+from sqlalchemy import create_engine, text
 import os
 
 app = Flask(__name__)
 
+# ✅ Get DATABASE_URL securely from environment variables
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# ✅ Create a database engine for PostgreSQL
+engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)
+
 @app.route("/")
 def home():
+    """Load the main frontend."""
     return render_template("index.html")
 
-@app.route("/fetch-results", methods=["POST"])
-def fetch_results():
-    """Fetch race results from ChatGPT."""
+@app.route("/query-db", methods=["POST"])
+def query_database():
+    """Handle database queries securely."""
     data = request.json
-    url = data.get("url")
+    user_query = data.get("query", "").lower()
 
-    if not url:
-        return jsonify({"error": "URL is required"}), 400
+    with engine.connect() as conn:
+        if "results for sailor" in user_query:
+            sailor_name = user_query.split("results for sailor")[-1].strip()
+            sql = text("SELECT * FROM race_results WHERE skipper ILIKE :sailor_name")
+            result = conn.execute(sql, {"sailor_name": f"%{sailor_name}%"}).fetchall()
+        
+        elif "results for" in user_query and "team" in user_query:
+            team_name = user_query.split("results for the")[-1].strip().split("team")[0].strip()
+            sql = text("SELECT * FROM race_results WHERE yacht_club ILIKE :team_name ORDER BY id DESC LIMIT 5")
+            result = conn.execute(sql, {"team_name": f"%{team_name}%"}).fetchall()
+        
+        else:
+            return jsonify({"answer": "Sorry, I didn't understand. Try asking about a sailor or a team."})
 
-    try:
-        csv_data = fetch_race_results_from_chatgpt(url)
-        return jsonify({"csv_data": csv_data})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        if not result:
+            return jsonify({"answer": "No results found for your query."})
 
-@app.route("/send-to-db", methods=["POST"])
-def send_to_database():
-    """Send validated CSV data to PostgreSQL."""
-    data = request.json
-    csv_data = data.get("csv_data")
+        formatted_results = "\n".join(
+            [f"🏅 {row['skipper']} ({row['yacht_club']}): {row['results']} - {row['total_points']} points" for row in result]
+        )
 
-    if not csv_data:
-        return jsonify({"error": "No CSV data provided"}), 400
-
-    try:
-        response = send_to_db(csv_data)
-        return jsonify(response)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"answer": formatted_results})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=True)
