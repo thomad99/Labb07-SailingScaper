@@ -70,7 +70,7 @@
             document.getElementById("status").innerText = "Fetching results...";
             document.getElementById("debug").innerText = "Sending request to OpenAI API...";
 
-            let response = await fetch("/fetch-results", {
+            let response = await fetch("/api/fetch-results", {  // Use the correct API prefix
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url: url })
