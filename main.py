@@ -1,89 +1,105 @@
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 import os
-from chatbot import app as chatbot_app
-from scrape_race_results import scrape_and_store
-from database import Base, engine, SessionLocal
-from models import Sailor, Race, RaceResult
-from sqlalchemy import func
-from typing import Optional
 import requests
+from bs4 import BeautifulSoup
+from sqlalchemy import create_engine, Column, Integer, String, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import threading
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+Base = declarative_base()
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+class RegattaResult(Base):
+    __tablename__ = "regatta_results"
+    id = Column(Integer, primary_key=True, index=True)
+    regatta_name = Column(String, index=True)
+    regatta_date = Column(String, index=True)
+    race_category = Column(String, index=True)
+    pos = Column(Integer)
+    sail = Column(String)
+    boat = Column(String)
+    skipper = Column(String)
+    yacht_club = Column(String)
+    results = Column(Text)
+    total_points = Column(Integer)
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-
-# Create database tables
-Base.metadata.create_all(engine)
-
-# Mount the chatbot routes
-app.mount("/api", chatbot_app)
-
-# Set up templates
 templates = Jinja2Templates(directory="templates")
+progress_log = []
 
-# Try to import from config, fall back to environment variables if config is missing
-try:
-    from config import SCRAPE_BASE_URL
-except ImportError:
-    SCRAPE_BASE_URL = os.getenv("SCRAPE_BASE_URL", "https://example-sailing-results.com/results")
+def add_progress_message(message):
+    progress_log.append(message)
+
+def scrape_and_store(url, progress_callback):
+    try:
+        progress_callback(f"Starting scrape for {url}")
+        response = requests.get(url)
+        if response.status_code != 200:
+            progress_callback(f"Failed to retrieve page: {response.status_code}")
+            return
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        regatta_name = soup.find("h2").text.strip() if soup.find("h2") else "Unknown Regatta"
+        regatta_date = soup.find("h3").text.strip() if soup.find("h3") else "Unknown Date"
+        
+        tables = soup.find_all("table")
+        progress_callback(f"Total tables found: {len(tables)}")
+        
+        session = SessionLocal()
+        total_results = 0
+        
+        for table in tables:
+            headers = [th.text.strip() for th in table.find_all("th")]
+            if "Pos" in headers and "Sail" in headers:
+                race_category = table.find_previous("h4").text.strip() if table.find_previous("h4") else "Unknown Category"
+                rows = table.find_all("tr")[1:]
+                for row in rows:
+                    cols = row.find_all("td")
+                    if len(cols) >= 7:
+                        result = RegattaResult(
+                            regatta_name=regatta_name,
+                            regatta_date=regatta_date,
+                            race_category=race_category,
+                            pos=int(cols[0].text.strip()),
+                            sail=cols[1].text.strip(),
+                            boat=cols[2].text.strip(),
+                            skipper=cols[3].text.strip(),
+                            yacht_club=cols[4].text.strip(),
+                            results=cols[5].text.strip(),
+                            total_points=int(cols[6].text.strip())
+                        )
+                        session.add(result)
+                        total_results += 1
+        session.commit()
+        session.close()
+        progress_callback(f"Scraping complete: {total_results} results extracted.")
+    except Exception as e:
+        progress_callback(f"Error: {str(e)}")
 
 @app.post("/trigger-scrape")
-async def trigger_scrape(background_tasks: BackgroundTasks):
-    """Endpoint to trigger the scraping process"""
-    background_tasks.add_task(scrape_and_store, SCRAPE_BASE_URL, lambda x: print(x))
-    return {"message": "Scraping process started"}
+async def trigger_scrape(request: Request, background_tasks: BackgroundTasks):
+    data = await request.json()
+    url = data.get("url")
+    if not url:
+        return {"error": "URL is required"}
+    
+    background_tasks.add_task(scrape_and_store, url, add_progress_message)
+    return {"message": f"Scraping started for {url}"}
 
-@app.get("/scrape-status")
-async def scrape_status():
-    """Endpoint to check scraping status"""
-    return {"status": "running"}  # Placeholder status tracking
+@app.get("/get-progress")
+async def get_progress():
+    return {"progress": progress_log}
 
 @app.get("/")
 async def root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.get("/health")
-async def health_check(request: Request):
-    """Health check endpoint - returns HTML page if browser requests it"""
-    if request.headers.get("accept", "").startswith("text/html"):
-        return templates.TemplateResponse("health.html", {"request": request})
-    return {"status": "healthy"}
-
-@app.get("/admin")
-async def admin(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
-
-@app.get("/db-status")
-async def db_status():
-    """Get database table counts"""
-    with SessionLocal() as session:
-        stats = {
-            "sailors": session.query(func.count(Sailor.id)).scalar(),
-            "races": session.query(func.count(Race.id)).scalar(),
-            "race_results": session.query(func.count(RaceResult.id)).scalar(),
-        }
-    return stats
-
-@app.get("/test-url")
-async def test_url(url: str):
-    """Test endpoint to verify URL fetch"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        return {
-            "status": response.status_code,
-            "content_length": len(response.text),
-            "content_type": response.headers.get('content-type'),
-            "preview": response.text[:1000]
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), reload=True)
