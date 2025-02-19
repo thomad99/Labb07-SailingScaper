@@ -1,24 +1,29 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-import chromedriver_autoinstaller
-from selenium.webdriver.common.by import By
-from bs4 import BeautifulSoup
+import subprocess
 import time
+from bs4 import BeautifulSoup
+
+def install_chrome():
+    """Manually install Chrome on Render."""
+    print("🔧 Installing Chrome...")
+    subprocess.run("apt-get update && apt-get install -y chromium-browser", shell=True, check=True)
+    print("✅ Chrome installed!")
 
 def scrape_regatta_page(url):
     """Use Selenium to scrape dynamically loaded race results."""
     print(f"🔍 Fetching URL: {url} using Selenium")
 
-    # ✅ Ensure Chrome is installed
-    chromedriver_autoinstaller.install()
+    # ✅ Install Chrome if not found
+    install_chrome()
 
-    # ✅ Set up Selenium WebDriver in headless mode
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # Run without opening a browser
-    options.add_argument("--no-sandbox")  # Required for running in Docker
+    # ✅ Set up Selenium WebDriver
+    options = Options()
+    options.add_argument("--headless")  # Run without GUI
+    options.add_argument("--no-sandbox")  # Required for Docker
     options.add_argument("--disable-dev-shm-usage")  # Prevent crashes
-    options.add_argument("--disable-gpu")
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
