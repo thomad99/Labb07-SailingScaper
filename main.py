@@ -21,7 +21,7 @@ def fetch_results():
 
     formatted_csv = format_data_with_gpt(raw_results)
 
-    file_path = save_to_csv(formatted_csv)  # ✅ Saves locally and pushes to GitHub
+    file_path = save_csv(formatted_csv)  # ✅ Saves locally and pushes to GitHub
 
     return jsonify({"message": "Data successfully saved and uploaded!", "file_path": file_path})
 
