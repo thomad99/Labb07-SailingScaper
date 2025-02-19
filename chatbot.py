@@ -125,7 +125,15 @@ async def ask_question(query: Query):
         # Execute query
         with SessionLocal() as db:
             result = db.execute(text(sql_query))
-            data = [dict(row) for row in result]
+            
+            # Handle different result types
+            if sql_query.lower().strip().startswith('select count'):
+                # For COUNT queries, get the single value
+                data = [{"count": result.scalar()}]
+            else:
+                # For other queries, get all rows as dictionaries
+                data = [dict(zip(result.keys(), row)) for row in result]
+            
             print(f"Query results: {data}")  # Debug print
         
         # Format results
@@ -137,7 +145,7 @@ async def ask_question(query: Query):
     
     except Exception as e:
         print(f"Error processing question: {str(e)}")  # Debug print
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/test")
 async def test_connection():
