@@ -6,7 +6,6 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    """Load the HTML frontend."""
     return render_template("index.html")
 
 @app.route("/fetch-results", methods=["POST"])
