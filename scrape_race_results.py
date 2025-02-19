@@ -140,98 +140,103 @@ class SailingRaceScraper:
             print("\n=== Page Content Analysis ===")
             print(f"URL being processed: {url}")
             
-            # For Regatta Network, look for the main results table
-            results_table = soup.find('table', {'class': 'results'}) or soup.find('table')
+            # Find all race category sections
+            race_sections = soup.find_all('h2')  # Each category starts with an h2 tag
             
-            if results_table:
-                print("\nFound results table")
-                
-                # Try to find event name and date from the page header
-                event_name = soup.find('h1') or soup.find('title')
-                event_name = event_name.text.strip() if event_name else "Unknown Event"
-                
-                # Look for date in the text
-                date_pattern = r'(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}'
-                date_match = re.search(date_pattern, html)
-                race_date = datetime.strptime(date_match.group(), '%B %d, %Y') if date_match else datetime.now()
-                
-                # Get headers from the first row
-                headers = []
-                header_row = results_table.find('tr')
-                if header_row:
-                    for th in header_row.find_all(['th', 'td']):
-                        headers.append(th.text.strip().lower())
-                
-                print(f"Found headers: {headers}")
-                
-                # Create a race category based on the event name
-                category_name = event_name.split('-')[0].strip()
-                category = self.session.query(RaceCategory).filter_by(name=category_name).first()
-                if not category:
-                    category = RaceCategory(name=category_name)
-                    self.session.add(category)
+            for section in race_sections:
+                try:
+                    # Get category name (e.g., "Flying Scot (7 boats)")
+                    category_text = section.text.strip()
+                    category_name = category_text.split('(')[0].strip()
+                    print(f"\nProcessing category: {category_name}")
+                    
+                    # Create or get category
+                    category = self.session.query(RaceCategory).filter_by(name=category_name).first()
+                    if not category:
+                        category = RaceCategory(name=category_name)
+                        self.session.add(category)
+                        self.session.flush()
+                    
+                    # Find the results table for this category
+                    results_table = section.find_next('table')
+                    if not results_table:
+                        continue
+                    
+                    # Get the event name and date
+                    event_name = soup.find('h1').text.strip()
+                    date_pattern = r'(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}'
+                    date_match = re.search(date_pattern, event_name)
+                    race_date = datetime.strptime(date_match.group(), '%B %d, %Y') if date_match else datetime.now()
+                    
+                    # Create the race
+                    race = Race(
+                        name=f"{event_name} - {category_name}",
+                        date=race_date,
+                        venue="Sarasota Sailing Squadron",
+                        category_id=category.id,
+                        event_name=event_name
+                    )
+                    self.session.add(race)
                     self.session.flush()
-                
-                # Create the race
-                race = Race(
-                    name=event_name,
-                    date=race_date,
-                    venue="Unknown",
-                    category_id=category.id,
-                    event_name=event_name
-                )
-                self.session.add(race)
-                self.session.flush()
-                
-                # Process each row of results
-                for row in results_table.find_all('tr')[1:]:  # Skip header row
-                    cells = row.find_all('td')
-                    if len(cells) >= len(headers):
+                    
+                    # Process results
+                    # Skip header rows and find the actual results
+                    rows = results_table.find_all('tr')
+                    for row in rows:
                         try:
-                            data = {}
-                            for i, cell in enumerate(cells):
-                                if i < len(headers):
-                                    data[headers[i]] = cell.text.strip()
-                            
-                            # Get position and sailor name
-                            position = int(data.get('position', data.get('pos', '0'))) if data.get('position', data.get('pos', '0')).isdigit() else None
-                            sailor_name = data.get('skipper', data.get('helm', data.get('name', '')))
-                            
-                            if sailor_name:
-                                # Create or get sailor
-                                sailor = self.session.query(Sailor).filter_by(name=sailor_name).first()
-                                if not sailor:
-                                    sailor = Sailor(
-                                        name=sailor_name,
-                                        club=data.get('club', ''),
-                                        age_category=''
-                                    )
-                                    self.session.add(sailor)
-                                    self.session.flush()
+                            cells = row.find_all('td')
+                            if not cells:  # Skip header rows
+                                continue
                                 
-                                # Create result
-                                result = RaceResult(
-                                    sailor_id=sailor.id,
-                                    race_id=race.id,
-                                    position=position,
-                                    sail_number=data.get('sail', data.get('sail #', '')),
-                                    boat_name=data.get('boat', ''),
-                                    yacht_club=data.get('club', ''),
-                                    points=float(data.get('points', 0)) if data.get('points', '').replace('.', '').isdigit() else None,
-                                    total_points=float(data.get('total', 0)) if data.get('total', '').replace('.', '').isdigit() else None
+                            # Parse the result row (format: Pos,Sail,Boat,Skipper,Yacht Club,Results,Total Points)
+                            pos_text = cells[0].text.strip().rstrip('.')  # Remove trailing period
+                            if not pos_text or not pos_text[0].isdigit():
+                                continue
+                                
+                            position = int(pos_text)
+                            sail_number = cells[1].text.strip()
+                            boat_name = cells[2].text.strip()
+                            skipper_name = cells[3].text.strip()
+                            yacht_club = cells[4].text.strip()
+                            results = cells[5].text.strip()
+                            total_points = float(cells[6].text.strip().split()[0])  # Format: "3 T" or just "3"
+                            
+                            # Create or get sailor
+                            sailor = self.session.query(Sailor).filter_by(name=skipper_name).first()
+                            if not sailor:
+                                sailor = Sailor(
+                                    name=skipper_name,
+                                    club=yacht_club
                                 )
-                                self.session.add(result)
-                                print(f"Added result for {sailor_name}")
-                        
+                                self.session.add(sailor)
+                                self.session.flush()
+                            
+                            # Create result
+                            result = RaceResult(
+                                sailor_id=sailor.id,
+                                race_id=race.id,
+                                position=position,
+                                sail_number=sail_number,
+                                boat_name=boat_name,
+                                yacht_club=yacht_club,
+                                total_points=total_points,
+                                dnf='DNF' in results,
+                                dns='DNS' in results
+                            )
+                            self.session.add(result)
+                            print(f"Added result for {skipper_name} in {category_name}")
+                            
                         except Exception as e:
-                            print(f"Error processing row: {e}")
+                            print(f"Error processing result row: {e}")
                             continue
-                
-                self.session.commit()
-                races.append(race)
-                
-            else:
-                print("No results table found on page")
+                    
+                    self.session.commit()
+                    races.append(race)
+                    
+                except Exception as e:
+                    print(f"Error processing category {category_name}: {e}")
+                    self.session.rollback()
+                    continue
                 
         except Exception as e:
             print(f"Error parsing page: {e}")
