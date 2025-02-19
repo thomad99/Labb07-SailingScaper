@@ -3,7 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sailing Race Results Scraper</title>
+    <title>Sailing Race Scraper</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #chatbox, #debug {
+            width: 100%;
+            height: 200px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            padding: 10px;
+            background-color: #f9f9f9;
+            margin-bottom: 10px;
+        }
+        .message {
+            margin: 5px 0;
+        }
+        .user {
+            font-weight: bold;
+            color: blue;
+        }
+        .bot {
+            font-weight: bold;
+            color: green;
+        }
+        #user-input {
+            width: 80%;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        #send-btn {
+            padding: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h2>🏆 Sailing Race Chatbot ⛵</h2>
+    <div id="chatbox"></div>
+    
+    <label for="url">Enter Regatta URL:</label>
+    <input type="text" id="url">
+    <button onclick="fetchResults()">Fetch from ChatGPT</button>
+
+    <h3>Fetched CSV Data</h3>
+    <textarea id="csv_output"></textarea>
+
+    <h3>Debug Info</h3>
+    <div id="debug"></div>
+
+    <br><br>
+    <button onclick="sendToDB()">Send to Database</button>
+
+    <p id="status"></p>
+
     <script>
         async function fetchResults() {
             let url = document.getElementById("url").value;
@@ -13,7 +68,8 @@
             }
 
             document.getElementById("status").innerText = "Fetching results...";
-            
+            document.getElementById("debug").innerText = "Sending request to OpenAI API...";
+
             let response = await fetch("/fetch-results", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -21,6 +77,15 @@
             });
 
             let data = await response.json();
+
+            if (data.prompt) {
+                document.getElementById("debug").innerText += `\n📝 OpenAI Prompt Sent:\n${data.prompt}`;
+            }
+
+            if (data.raw_response) {
+                document.getElementById("debug").innerText += `\n📩 Raw API Response:\n${data.raw_response}`;
+            }
+
             if (data.csv_data) {
                 document.getElementById("csv_output").value = data.csv_data;
                 document.getElementById("status").innerText = "Data fetched!";
@@ -48,19 +113,5 @@
             document.getElementById("status").innerText = data.message || "Error: " + data.error;
         }
     </script>
-</head>
-<body>
-    <h2>Sailing Race Results Scraper</h2>
-    <label for="url">Enter Regatta URL:</label>
-    <input type="text" id="url">
-    <button onclick="fetchResults()">Fetch from ChatGPT</button>
-
-    <h3>Fetched CSV Data</h3>
-    <textarea id="csv_output"></textarea>
-
-    <br><br>
-    <button onclick="sendToDB()">Send to Database</button>
-
-    <p id="status"></p>
 </body>
 </html>
