@@ -43,18 +43,23 @@ def fetch_race_results_from_chatgpt(url):
 @app.route("/fetch-results", methods=["POST"])
 def fetch_results():
     """Fetch race results from OpenAI and return CSV data."""
-    data = request.json
-    url = data.get("url")
-
-    if not url:
-        return jsonify({"error": "Missing URL"}), 400
-
     try:
-        csv_data = fetch_race_results_from_chatgpt(url)
-        return jsonify({"csv_data": csv_data})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        data = request.json
+        url = data.get("url")
 
+        if not url:
+            return jsonify({"error": "Missing URL"}), 400
+
+        csv_data = fetch_race_results_from_chatgpt(url)
+
+        if not csv_data:
+            return jsonify({"error": "No data received from OpenAI"}), 500
+
+        return jsonify({"csv_data": csv_data})
+
+    except Exception as e:
+        print(f"🚨 ERROR: {str(e)}")  # Logs error to Render
+        return jsonify({"error": str(e)}), 500
 @app.route("/send-to-db", methods=["POST"])
 def send_to_db():
     """Store validated CSV data into PostgreSQL."""
