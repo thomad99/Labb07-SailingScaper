@@ -221,18 +221,28 @@ ${data.categories.map(cat => `- ${cat.name}: ${cat.race_count} races`).join('\n'
             })
             .then(response => response.json())
             .then(data => {
-                const resultsHtml = `Scrape Completed:
+                console.log('Raw scrape response:', data);  // Debug log
                 
-URL: ${data.url_processed}
-Total Races: ${data.total_races}
-Total Results: ${data.total_results}
-Categories Found: ${data.categories.length}
+                const resultsHtml = `Scrape Completed:
+
+URL: ${data.url_processed || 'No URL provided'}
+Total Races: ${data.total_races || 0}
+Total Results: ${data.total_results || 0}
+Categories Found: ${data.categories ? data.categories.length : 0}
 
 Categories:
-${data.categories.map(cat => `- ${cat}`).join('\n')}
+${data.categories ? data.categories.map(cat => `- ${cat}`).join('\n') : 'None found'}
 
-Time Taken: ${data.elapsed_time}
-Status: ${data.stop_reason}`;
+Raw Data:
+${JSON.stringify(data, null, 2)}
+
+Time Taken: ${data.elapsed_time || 'Unknown'}
+Status: ${data.stop_reason || 'Unknown'}
+
+Debug Info:
+- Response Type: ${typeof data}
+- Has Categories: ${Boolean(data.categories)}
+- Raw Categories: ${JSON.stringify(data.categories)}`;
                 
                 resultsDiv.innerText = resultsHtml;
                 
@@ -240,7 +250,12 @@ Status: ${data.stop_reason}`;
                 updateDbStats();
             })
             .catch(error => {
-                resultsDiv.innerText = `Error: ${error}`;
+                resultsDiv.innerText = `Error during scrape:
+Error Message: ${error.message}
+Stack Trace: ${error.stack}
+
+Please check the browser console and server logs for more details.`;
+                console.error('Scrape error:', error);
             });
         });
 
