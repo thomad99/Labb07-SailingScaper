@@ -1,29 +1,24 @@
-from flask import Flask, request, jsonify
+from flask import Blueprint, request, jsonify
 import openai
 import os
-import json
 
-app = Flask(__name__)
+# ✅ Define a Flask Blueprint
+scraper_bp = Blueprint("scraper", __name__)
 
-# OpenAI API Key
+# ✅ OpenAI API Key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 if not OPENAI_API_KEY:
     raise ValueError("Missing OPENAI_API_KEY. Set it in environment variables.")
+
 openai.api_key = OPENAI_API_KEY
 
 def fetch_race_results_from_chatgpt(url):
     """Fetch structured sailing race results from OpenAI and return raw API response."""
     prompt = f"""
     Extract and structure the sailing race data from the following URL: {url}.
-
-    The structured data should include:
-    - Regatta Name
-    - Regatta Date
-    - Race Categories (e.g., Sunfish, M15)
-    - Results for each category in CSV format:
-      Pos, Sail, Boat, Skipper, Yacht Club, Results, Total Points
-
-    Ensure the data is cleaned and formatted correctly.
+    Return the results in a CSV format with the following columns:
+    Pos, Sail, Boat, Skipper, Yacht Club, Results, Total Points
     """
 
     try:
@@ -43,7 +38,7 @@ def fetch_race_results_from_chatgpt(url):
     except Exception as e:
         return {"error": str(e)}
 
-@app.route("/fetch-results", methods=["POST"])
+@scraper_bp.route("/fetch-results", methods=["POST"])
 def fetch_results():
     """API endpoint to fetch race results from ChatGPT and return debug info."""
     data = request.json
@@ -54,6 +49,3 @@ def fetch_results():
 
     debug_data = fetch_race_results_from_chatgpt(url)
     return jsonify(debug_data)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
