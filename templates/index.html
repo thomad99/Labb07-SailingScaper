@@ -4,6 +4,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sailing Race Results Scraper</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin-top: 10px;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+            color: blue;
+        }
+        #log {
+            background: #f4f4f4;
+            padding: 10px;
+            margin-top: 15px;
+            height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+        }
+    </style>
     <script>
         async function fetchResults() {
             let url = document.getElementById("url").value;
@@ -13,19 +44,28 @@
             }
 
             document.getElementById("status").innerText = "Fetching results from ChatGPT...";
-            
-            let response = await fetch("/fetch-results", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: url })
-            });
+            document.getElementById("log").innerText = "Starting request...\n";
 
-            let data = await response.json();
-            if (data.csv_data) {
-                document.getElementById("csv_output").value = data.csv_data;
-                document.getElementById("status").innerText = "Data fetched successfully!";
-            } else {
-                document.getElementById("status").innerText = "Error fetching data: " + data.error;
+            try {
+                let response = await fetch("/fetch-results", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: url })
+                });
+
+                let data = await response.json();
+
+                if (data.csv_data) {
+                    document.getElementById("csv_output").value = data.csv_data;
+                    document.getElementById("status").innerText = "Data fetched successfully!";
+                    document.getElementById("log").innerText += "✅ ChatGPT response received.\n";
+                } else {
+                    throw new Error(data.error || "Unknown error");
+                }
+            } catch (error) {
+                console.error("🚨 Error fetching data:", error);
+                document.getElementById("status").innerText = "Error fetching data: " + error.message;
+                document.getElementById("log").innerText += "❌ Error: " + error.message + "\n";
             }
         }
 
@@ -37,15 +77,23 @@
             }
 
             document.getElementById("status").innerText = "Sending data to database...";
-            
-            let response = await fetch("/send-to-db", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ csv_data: csv_data })
-            });
+            document.getElementById("log").innerText += "Sending data to database...\n";
 
-            let data = await response.json();
-            document.getElementById("status").innerText = data.message || "Error: " + data.error;
+            try {
+                let response = await fetch("/send-to-db", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ csv_data: csv_data })
+                });
+
+                let data = await response.json();
+                document.getElementById("status").innerText = data.message || "Error: " + data.error;
+                document.getElementById("log").innerText += "✅ " + (data.message || data.error) + "\n";
+            } catch (error) {
+                console.error("🚨 Error sending to DB:", error);
+                document.getElementById("status").innerText = "Error sending data to database: " + error.message;
+                document.getElementById("log").innerText += "❌ Database error: " + error.message + "\n";
+            }
         }
     </script>
 </head>
@@ -57,11 +105,14 @@
     <button onclick="fetchResults()">Fetch from ChatGPT</button>
     
     <h3>Fetched CSV Data</h3>
-    <textarea id="csv_output" rows="10" cols="80"></textarea>
+    <textarea id="csv_output" placeholder="CSV data will appear here..."></textarea>
     
     <br><br>
     <button onclick="sendToDB()">Send to Database</button>
     
     <p id="status"></p>
+
+    <h3>Debug Log</h3>
+    <div id="log"></div>
 </body>
 </html>
