@@ -3,7 +3,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import os
 from chatbot import app as chatbot_app
-from scrape_race_results import SailingRaceScraper
+from scrape_race_results import scrape_and_store
 from database import Base, engine, SessionLocal
 from models import Sailor, Race, RaceResult
 from sqlalchemy import func
@@ -27,49 +27,16 @@ try:
 except ImportError:
     SCRAPE_BASE_URL = os.getenv("SCRAPE_BASE_URL", "https://example-sailing-results.com/results")
 
-# Add at the top level of the file
-active_scraper: Optional[SailingRaceScraper] = None
-
-def run_scraper():
-    scraper = SailingRaceScraper(SCRAPE_BASE_URL)
-    scraper.scrape_all_results()
-
 @app.post("/trigger-scrape")
 async def trigger_scrape(background_tasks: BackgroundTasks):
     """Endpoint to trigger the scraping process"""
-    global active_scraper
-    
-    if active_scraper:
-        return {"message": "Scraper is already running"}
-    
-    active_scraper = SailingRaceScraper(SCRAPE_BASE_URL)
-    try:
-        summary = active_scraper.scrape_all_results()
-        return {
-            "message": "Scraping process completed",
-            "summary": summary
-        }
-    finally:
-        active_scraper = None
-
-@app.post("/stop-scrape")
-async def stop_scrape():
-    """Endpoint to stop the scraping process"""
-    global active_scraper
-    
-    if active_scraper:
-        active_scraper.stop_scraping()
-        return {"message": "Stopping scraper..."}
-    return {"message": "No active scraper to stop"}
+    background_tasks.add_task(scrape_and_store, SCRAPE_BASE_URL, lambda x: print(x))
+    return {"message": "Scraping process started"}
 
 @app.get("/scrape-status")
 async def scrape_status():
     """Endpoint to check scraping status"""
-    # You might want to add a status tracking mechanism
-    return {"status": "running"}  # or "completed" or "failed"
-
-# Serve static files if you have any
-# app.mount("/static", StaticFiles(directory="static"), name="static")
+    return {"status": "running"}  # Placeholder status tracking
 
 @app.get("/")
 async def root(request: Request):
@@ -97,42 +64,6 @@ async def db_status():
         }
     return stats
 
-@app.post("/scrape")
-async def scrape_url(request: dict):
-    try:
-        url = request.get("url")
-        scraper = SailingRaceScraper(url)
-        result = scraper.scrape_all_results()
-        
-        # Ensure we have all required fields
-        response = {
-            "url_processed": url,
-            "total_races": result.get("total_races", 0),
-            "total_results": result.get("total_results", 0),
-            "categories": result.get("categories", []),
-            "elapsed_time": result.get("elapsed_time", "unknown"),
-            "stop_reason": result.get("stop_reason", "completed"),
-            "debug_info": {
-                "html_length": len(scraper.last_html) if hasattr(scraper, "last_html") else 0,
-                "tables_found": scraper.tables_found if hasattr(scraper, "tables_found") else 0,
-                "parse_errors": scraper.parse_errors if hasattr(scraper, "parse_errors") else []
-            }
-        }
-        
-        return response
-        
-    except Exception as e:
-        print(f"Error in scrape endpoint: {str(e)}")
-        return {
-            "error": str(e),
-            "url_processed": url,
-            "total_races": 0,
-            "total_results": 0,
-            "categories": [],
-            "elapsed_time": "error",
-            "stop_reason": f"error: {str(e)}"
-        }
-
 @app.get("/test-url")
 async def test_url(url: str):
     """Test endpoint to verify URL fetch"""
@@ -155,4 +86,4 @@ async def test_url(url: str):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True) 
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
