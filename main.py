@@ -44,5 +44,13 @@ def query_database():
 
         return jsonify({"answer": formatted_results})
 
+
+@app.route("/chatbot")
+def chatbot():
+    """Load the chatbot interface."""
+    return render_template("chatbot.html")
+
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=True)
