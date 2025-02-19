@@ -24,3 +24,14 @@ def fetch_results():
     file_path = save_to_csv(formatted_csv)  # ✅ Saves locally and pushes to GitHub
 
     return jsonify({"message": "Data successfully saved and uploaded!", "file_path": file_path})
+
+@app.route("/download-results", methods=["GET"])
+def download_results():
+    """Endpoint to allow users to download the generated CSV file."""
+    if os.path.exists(CSV_FILE_PATH):
+        return send_file(CSV_FILE_PATH, as_attachment=True, download_name="race_results.csv")
+    else:
+        return jsonify({"error": "No CSV file found"}), 404
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=True)
