@@ -1,62 +1,43 @@
-from flask import Flask, render_template, request, jsonify
-from sqlalchemy import create_engine, text
+from flask import Flask, request, jsonify, send_file
 import os
+from scrape_regatta import scrape_regatta_page
+from openai_formatter import format_data_with_gpt
+from save_csv import save_to_csv
 
 app = Flask(__name__)
 
-# ✅ Get DATABASE_URL securely from environment variables
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-if not DATABASE_URL:
-    raise ValueError("Missing DATABASE_URL. Set it in Render environment variables.")
-
-# ✅ Create a database engine for PostgreSQL
-engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)
-
-# ✅ Import Blueprint from chatgpt_scraper
-from chatgpt_scraper import scraper_bp  
-
-# ✅ Register Blueprint for scraper routes
-app.register_blueprint(scraper_bp, url_prefix="/api")  # All API calls will be prefixed with /api
-
-@app.route("/")
-def home():
-    """Load the main frontend."""
-    return render_template("index.html")
-
-@app.route("/query-db", methods=["POST"])
-def query_database():
-    """Handle database queries securely."""
+@app.route("/fetch-results", methods=["POST"])
+def fetch_results():
+    """API endpoint to scrape, format, and save race results."""
     data = request.json
-    user_query = data.get("query", "").lower()
+    url = data.get("url")
 
-    with engine.connect() as conn:
-        if "results for sailor" in user_query:
-            sailor_name = user_query.split("results for sailor")[-1].strip()
-            sql = text("SELECT * FROM race_results WHERE skipper ILIKE :sailor_name")
-            result = conn.execute(sql, {"sailor_name": f"%{sailor_name}%"}).fetchall()
-        
-        elif "results for" in user_query and "team" in user_query:
-            team_name = user_query.split("results for the")[-1].strip().split("team")[0].strip()
-            sql = text("SELECT * FROM race_results WHERE yacht_club ILIKE :team_name ORDER BY id DESC LIMIT 5")
-            result = conn.execute(sql, {"team_name": f"%{team_name}%"}).fetchall()
-        
-        else:
-            return jsonify({"answer": "Sorry, I didn't understand. Try asking about a sailor or a team."})
+    if not url:
+        return jsonify({"error": "URL is required"}), 400
 
-        if not result:
-            return jsonify({"answer": "No results found for your query."})
+    # Step 1: Scrape webpage
+    raw_results = scrape_regatta_page(url)
 
-        formatted_results = "\n".join(
-            [f"🏅 {row['skipper']} ({row['yacht_club']}): {row['results']} - {row['total_points']} points" for row in result]
-        )
+    if "error" in raw_results:
+        return jsonify({"error": raw_results["error"]})
 
-        return jsonify({"answer": formatted_results})
+    # Step 2: Format with OpenAI
+    formatted_csv = format_data_with_gpt(raw_results)
 
-@app.route("/chatbot")
-def chatbot():
-    """Load the chatbot interface."""
-    return render_template("chatbot.html")
+    # Step 3: Save as CSV file
+    file_path = save_to_csv(formatted_csv)
+
+    return jsonify({"message": "Data successfully saved!", "file_path": file_path})
+
+@app.route("/download-results", methods=["GET"])
+def download_results():
+    """API endpoint to download the saved CSV file."""
+    file_path = "/tmp/regatta_results.csv"
+
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True, download_name="race_results.csv")
+    else:
+        return jsonify({"error": "No CSV file found"}), 404
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=True)
