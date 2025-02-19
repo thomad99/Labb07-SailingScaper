@@ -140,119 +140,118 @@ class SailingRaceScraper:
             print("\n=== Page Content Analysis ===")
             print(f"URL being processed: {url}")
             
-            # Print HTML for debugging
-            print("\nFirst 1000 characters of HTML:")
-            print(html[:1000])
-            
-            # Find all tables - Regatta Network uses multiple tables
+            # Find all tables
             tables = soup.find_all('table')
             print(f"\nFound {len(tables)} tables")
             
-            # Find the main results table - usually the largest one
-            main_table = None
-            max_rows = 0
+            # Process each table that looks like results
             for table in tables:
-                rows = table.find_all('tr')
-                if len(rows) > max_rows:
-                    max_rows = len(rows)
-                    main_table = table
-            
-            if main_table:
-                print("\nFound main results table")
-                
-                # Get event name
-                event_name = "Cherry Pie Regatta"  # From the URL content
-                
-                # Find headers - they're usually in the first row
-                headers = []
-                header_row = main_table.find('tr')
-                if header_row:
-                    for th in header_row.find_all(['th', 'td']):
-                        headers.append(th.text.strip().lower())
-                    print(f"\nFound headers: {headers}")
-                
-                # Create categories based on boat classes found in the data
-                categories_found = set()
-                
-                # Process each row after the header
-                rows = main_table.find_all('tr')[1:]  # Skip header row
-                for row in rows:
-                    try:
-                        cells = row.find_all('td')
-                        if len(cells) < 5:  # Need minimum number of cells
-                            continue
-                        
-                        # Extract data
-                        pos_text = cells[0].text.strip()
-                        if not pos_text or not any(c.isdigit() for c in pos_text):
-                            continue
-                        
-                        position = int(''.join(c for c in pos_text if c.isdigit()))
-                        sail_number = cells[1].text.strip()
-                        boat_class = cells[2].text.strip()  # This is usually the boat class
-                        skipper_name = cells[3].text.strip()
-                        yacht_club = cells[4].text.strip() if len(cells) > 4 else "Unknown"
-                        
-                        print(f"\nProcessing: Position={position}, Sail={sail_number}, Class={boat_class}, Skipper={skipper_name}")
-                        
-                        # Add boat class to categories
-                        if boat_class and boat_class != "Unknown":
-                            categories_found.add(boat_class)
-                            
-                            # Create or get category
-                            category = self.session.query(RaceCategory).filter_by(name=boat_class).first()
-                            if not category:
-                                category = RaceCategory(name=boat_class)
-                                self.session.add(category)
-                                self.session.flush()
-                            
-                            # Create race if it doesn't exist for this category
-                            race = self.session.query(Race).filter_by(
-                                event_name=event_name,
-                                category_id=category.id
-                            ).first()
-                            
-                            if not race:
-                                race = Race(
-                                    name=f"{event_name} - {boat_class}",
-                                    date=datetime(2025, 2, 15),  # From event date
-                                    venue="Sarasota Sailing Squadron",
-                                    category_id=category.id,
-                                    event_name=event_name
-                                )
-                                self.session.add(race)
-                                self.session.flush()
-                            races.append(race)
-                            
-                            # Create or get sailor
-                            sailor = self.session.query(Sailor).filter_by(name=skipper_name).first()
-                            if not sailor:
-                                sailor = Sailor(
-                                    name=skipper_name,
-                                    club=yacht_club
-                                )
-                                self.session.add(sailor)
-                                self.session.flush()
-                            
-                            # Create result
-                            result = RaceResult(
-                                sailor_id=sailor.id,
-                                race_id=race.id,
-                                position=position,
-                                sail_number=sail_number,
-                                yacht_club=yacht_club
-                            )
-                            self.session.add(result)
-                            print(f"Added result for {skipper_name} in {boat_class}")
-                        
-                    except Exception as e:
-                        print(f"Error processing row: {e}")
+                try:
+                    # Check if this is a results table by looking at first row
+                    first_row = table.find('tr')
+                    if not first_row or len(first_row.find_all('td')) < 5:
                         continue
-                
-                self.session.commit()
-                
-            else:
-                print("No main results table found")
+                    
+                    # Get the category name from preceding h2
+                    category_header = table.find_previous('h2')
+                    if category_header:
+                        category_name = category_header.text.strip().split('(')[0].strip()
+                        print(f"\nProcessing category: {category_name}")
+                        
+                        # Create or get category
+                        category = self.session.query(RaceCategory).filter_by(name=category_name).first()
+                        if not category:
+                            category = RaceCategory(name=category_name)
+                            self.session.add(category)
+                            self.session.flush()
+                        
+                        # Create three races for this category (since there are three results per boat)
+                        base_race_name = "Cherry Pie Regatta"
+                        race_date = datetime(2025, 2, 15)
+                        
+                        races_in_series = []
+                        for i in range(1, 4):  # Create 3 races
+                            race = Race(
+                                name=f"{base_race_name} - {category_name} - Race {i}",
+                                date=race_date,
+                                venue="Sarasota Sailing Squadron",
+                                category_id=category.id,
+                                event_name=base_race_name
+                            )
+                            self.session.add(race)
+                            self.session.flush()
+                            races_in_series.append(race)
+                            races.append(race)
+                        
+                        # Process each row of results
+                        for row in table.find_all('tr')[1:]:  # Skip header row
+                            cells = row.find_all('td')
+                            if len(cells) < 6:  # Need at least position, sail, boat, skipper, club, results
+                                continue
+                            
+                            try:
+                                # Extract basic data
+                                position = int(cells[0].text.strip().split('.')[0])
+                                sail_number = cells[1].text.strip()
+                                boat_name = cells[2].text.strip()
+                                skipper_name = cells[3].text.strip()
+                                yacht_club = cells[4].text.strip()
+                                
+                                # Parse race results (format: "1-1-1-")
+                                results_text = cells[5].text.strip()
+                                race_results = results_text.split('-')[:-1]  # Split and remove empty last element
+                                total_points = float(cells[6].text.strip().split()[0])  # Format: "3 T" or just "3"
+                                
+                                print(f"\nProcessing: {sail_number} - {skipper_name} - Results: {race_results}")
+                                
+                                # Create or get sailor
+                                sailor = self.session.query(Sailor).filter_by(name=skipper_name).first()
+                                if not sailor:
+                                    sailor = Sailor(
+                                        name=skipper_name,
+                                        club=yacht_club
+                                    )
+                                    self.session.add(sailor)
+                                    self.session.flush()
+                                
+                                # Add results for each race
+                                for race_num, (race, result) in enumerate(zip(races_in_series, race_results)):
+                                    # Parse the result
+                                    dnf = 'DNF' in result
+                                    dns = 'DNS' in result
+                                    dnc = 'DNC' in result
+                                    
+                                    # Get position or max position for DNF/DNS/DNC
+                                    if dnf or dns or dnc:
+                                        race_position = 8  # From the data, seems to be max position
+                                    else:
+                                        race_position = int(result)
+                                    
+                                    result = RaceResult(
+                                        sailor_id=sailor.id,
+                                        race_id=race.id,
+                                        position=race_position,
+                                        sail_number=sail_number,
+                                        boat_name=boat_name,
+                                        yacht_club=yacht_club,
+                                        points=float(result.split('/')[0]) if '/' in result else float(result),
+                                        total_points=total_points,
+                                        dnf=dnf,
+                                        dns=dns
+                                    )
+                                    self.session.add(result)
+                                    print(f"Added result for race {race_num + 1}: Position {race_position}")
+                                
+                            except Exception as e:
+                                print(f"Error processing row: {e}")
+                                continue
+                        
+                        self.session.commit()
+                        
+                except Exception as e:
+                    print(f"Error processing table: {e}")
+                    self.session.rollback()
+                    continue
                 
         except Exception as e:
             print(f"Error parsing page: {e}")
