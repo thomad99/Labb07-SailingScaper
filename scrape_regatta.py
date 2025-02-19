@@ -1,17 +1,31 @@
-import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
+import time
 
 def scrape_regatta_page(url):
-    """Scrape the regatta results webpage and extract raw table data."""
-    print(f"🔍 Fetching URL: {url}")  # ✅ Log the requested URL
+    """Use Selenium to scrape dynamically loaded race results."""
+    print(f"🔍 Fetching URL: {url} using Selenium")
 
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+    # ✅ Set up Selenium WebDriver
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Run without opening a browser
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-    if response.status_code != 200:
-        print(f"❌ Failed to fetch data. Status code: {response.status_code}")
-        return {"error": f"Failed to fetch data. Status code: {response.status_code}"}
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    
+    driver.get(url)
+    time.sleep(5)  # ✅ Wait for JavaScript to load
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    page_html = driver.page_source
+    driver.quit()  # ✅ Close the browser
+
+    # ✅ Parse the full page HTML with BeautifulSoup
+    soup = BeautifulSoup(page_html, "html.parser")
 
     tables = soup.find_all("table")
     extracted_data = []
@@ -23,20 +37,15 @@ def scrape_regatta_page(url):
     for index, table in enumerate(tables):
         headers = [th.get_text(strip=True) for th in table.find_all("th")]
 
-        if not headers:  # Try an alternative method if no <th> found
-            first_row = table.find("tr")
-            if first_row:
-                headers = [td.get_text(strip=True) for td in first_row.find_all("td")]
-        
-        print(f"🔍 Table {index+1} headers: {headers}")  # ✅ Log detected table headers
+        print(f"🔍 Table {index+1} headers: {headers}")
 
         if "Pos" in headers or "Sail" in headers or "Skipper" in headers:
             rows = table.find_all("tr")[1:]  # Skip header row
 
             for row in rows:
                 cols = [td.get_text(strip=True) for td in row.find_all("td")]
-                if len(cols) >= 5:  # ✅ Adjust the number based on expected columns
+                if len(cols) >= 5:
                     extracted_data.append(cols)
 
-    print(f"✅ Extracted {len(extracted_data)} race results")  # ✅ Log the extracted results
+    print(f"✅ Extracted {len(extracted_data)} race results")
     return extracted_data
