@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sailing Race Scraper with ChatGPT</title>
+    <script>
+        function startScrape() {
+            let url = document.getElementById("url").value;
+            if (!url) {
+                alert("Please enter a URL to scrape.");
+                return;
+            }
+            
+            fetch("/scrape_chatgpt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: url })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("csv_output").innerText = data.csv_data;
+            });
+        }
+
+        function sendToDB() {
+            let csv_data = document.getElementById("csv_output").innerText;
+            if (!csv_data) {
+                alert("No CSV data to send to the database.");
+                return;
+            }
+            
+            fetch("/send_to_db", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ csv_data: csv_data })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>Sailing Race Scraper with ChatGPT</h1>
+    <label for="url">Enter Regatta Results URL:</label>
+    <input type="text" id="url" placeholder="Enter URL here">
+    <button onclick="startScrape()">Start Scrape</button>
+    <h2>CSV Output</h2>
+    <pre id="csv_output"></pre>
+    <button onclick="sendToDB()">Send Data to Database</button>
+</body>
+</html>
