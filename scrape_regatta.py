@@ -7,17 +7,22 @@ from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import time
 
-# ✅ Define Chromium & ChromeDriver Paths (For Portable Binary)
-CHROMIUM_PATH = "/usr/bin/chromium"
-CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
+# ✅ Define a reliable Chromium binary location
+CHROMIUM_PATH = "/usr/local/bin/chrome-linux/chrome"
+CHROMEDRIVER_PATH = "/usr/local/bin/chromedriver"
 
 def install_chromium():
-    """Download and configure a Chromium binary for Selenium."""
+    """Download and configure a portable Chromium binary for Selenium."""
     if not os.path.exists(CHROMIUM_PATH):
-        print("🔧 Downloading Chromium...")
-        subprocess.run("wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb", shell=True, check=True)
-        subprocess.run("dpkg -x /tmp/chrome.deb /tmp/chrome", shell=True, check=True)
-        subprocess.run("mv /tmp/chrome/opt/google/chrome/chrome /usr/bin/chromium", shell=True, check=True)
+        print("🔧 Downloading Chromium Portable...")
+
+        # ✅ Download and extract a stable Chromium version
+        subprocess.run(
+            "wget -q https://storage.googleapis.com/chrome-for-testing-public/122.0.6261.128/linux64/chrome-linux.zip -O /tmp/chrome.zip",
+            shell=True,
+            check=True,
+        )
+        subprocess.run("unzip /tmp/chrome.zip -d /usr/local/bin/", shell=True, check=True)
         print("✅ Chromium installed successfully!")
 
 def scrape_regatta_page(url):
@@ -27,9 +32,9 @@ def scrape_regatta_page(url):
     # ✅ Install Chromium if not found
     install_chromium()
 
-    # ✅ Set up Selenium WebDriver with the Chromium binary
+    # ✅ Set up Selenium WebDriver with the portable Chromium
     options = Options()
-    options.add_argument("--headless")  # Run in headless mode
+    options.add_argument("--headless")  # Run without UI
     options.add_argument("--no-sandbox")  # Required for Render/Docker environments
     options.add_argument("--disable-dev-shm-usage")  # Prevent crashes
     options.binary_location = CHROMIUM_PATH  # ✅ Use the manually installed Chromium
