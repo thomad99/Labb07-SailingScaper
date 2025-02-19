@@ -22,12 +22,18 @@ def fetch_race_results_from_chatgpt(url):
     """
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4-turbo",
-            messages=[{"role": "system", "content": "You are a sailing race data extractor."},
-                      {"role": "user", "content": prompt}],
-            max_tokens=2048
-        )
+client = openai.OpenAI()  # New way to call OpenAI API
+
+response = client.chat.completions.create(
+    model="gpt-4-turbo",
+    messages=[
+        {"role": "system", "content": "You are a sailing race data extractor."},
+        {"role": "user", "content": prompt}
+    ],
+    max_tokens=2048
+)
+
+        
 
         csv_data = response["choices"][0]["message"]["content"]
 
