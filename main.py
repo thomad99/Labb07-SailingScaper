@@ -5,6 +5,7 @@ import os
 from chatbot import app as chatbot_app
 from scrape_race_results import SailingRaceScraper
 from database import Base, engine, SessionLocal
+from models import Sailor, Race, RaceResult
 from sqlalchemy import func
 from typing import Optional
 import requests
@@ -88,8 +89,6 @@ async def admin(request: Request):
 @app.get("/db-status")
 async def db_status():
     """Get database table counts"""
-    from scrape_race_results import Sailor, Race, RaceResult
-    
     with SessionLocal() as session:
         stats = {
             "sailors": session.query(func.count(Sailor.id)).scalar(),
