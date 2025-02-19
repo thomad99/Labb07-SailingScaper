@@ -34,7 +34,7 @@ def push_to_github(filename):
         return
 
     # ✅ Set Git user identity (Fixes the "Author identity unknown" error)
-    subprocess.run(["git", "-C", repo_dir, "config", "user.email", "your-email@example.com"], check=True)
+    subprocess.run(["git", "-C", repo_dir, "config", "user.email", "david.thomas@thinworld.net"], check=True)
     subprocess.run(["git", "-C", repo_dir, "config", "user.name", GITHUB_USERNAME], check=True)
 
     # ✅ Move CSV file into the cloned repo
