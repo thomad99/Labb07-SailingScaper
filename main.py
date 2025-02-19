@@ -7,6 +7,7 @@ from scrape_race_results import SailingRaceScraper
 from database import Base, engine, SessionLocal
 from sqlalchemy import func
 from typing import Optional
+import requests
 
 app = FastAPI()
 
@@ -132,6 +133,25 @@ async def scrape_url(request: dict):
             "elapsed_time": "error",
             "stop_reason": f"error: {str(e)}"
         }
+
+@app.get("/test-url")
+async def test_url(url: str):
+    """Test endpoint to verify URL fetch"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        return {
+            "status": response.status_code,
+            "content_length": len(response.text),
+            "content_type": response.headers.get('content-type'),
+            "preview": response.text[:1000]
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
