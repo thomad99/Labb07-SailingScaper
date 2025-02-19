@@ -14,7 +14,7 @@ if not OPENAI_API_KEY:
 openai.api_key = OPENAI_API_KEY
 
 def fetch_race_results_from_chatgpt(url):
-    """Fetch structured sailing race results from OpenAI and return raw API response."""
+    """Fetch structured sailing race results from OpenAI and save as CSV."""
     prompt = f"""
     Extract and structure the sailing race data from the following URL: {url}.
     Return the results in a CSV format with the following columns:
@@ -29,18 +29,25 @@ def fetch_race_results_from_chatgpt(url):
             max_tokens=2048
         )
 
-        raw_response = response["choices"][0]["message"]["content"]
+        csv_data = response["choices"][0]["message"]["content"]
+
+        # ✅ Save CSV to a file
+        file_path = "/tmp/output.csv"  # Use /tmp since it's writable on Render
+        with open(file_path, "w", encoding="utf-8") as file:
+            file.write(csv_data)
+
         return {
             "prompt": prompt,
-            "raw_response": raw_response,
-            "csv_data": raw_response  # Assuming OpenAI correctly formats it
+            "raw_response": csv_data,
+            "csv_data": csv_data,
+            "file_path": file_path  # Return the file path
         }
     except Exception as e:
         return {"error": str(e)}
 
 @scraper_bp.route("/fetch-results", methods=["POST"])
 def fetch_results():
-    """API endpoint to fetch race results from ChatGPT and return debug info."""
+    """API endpoint to fetch race results from ChatGPT and save CSV."""
     data = request.json
     url = data.get("url")
 
