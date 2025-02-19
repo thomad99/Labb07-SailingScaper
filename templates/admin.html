@@ -37,20 +37,65 @@
             background-color: #6c757d;
             cursor: not-allowed;
         }
+        .debug-output {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
     <h1>Sailing Results Admin</h1>
-    <div>
-        <h2>Database Status</h2>
-        <pre id="dbStatus"></pre>
+    <div class="container mt-4">
+        <h2>Admin Dashboard</h2>
         
-        <h2>Scraper Control</h2>
-        <div class="button-group">
-            <button onclick="startScrape()" id="startButton">Start Scraping</button>
-            <button onclick="stopScrape()" id="stopButton" class="stop-button" disabled>Stop Scraping</button>
+        <!-- Scraping Controls -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>Scraping Controls</h3>
+            </div>
+            <div class="card-body">
+                <form id="scrapeForm" class="mb-3">
+                    <div class="form-group">
+                        <label for="url">URL to Scrape:</label>
+                        <input type="text" class="form-control" id="url" name="url" value="{{ scrape_url }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-2">Start Scraping</button>
+                </form>
+            </div>
         </div>
-        <div id="scrapeStatus" class="status"></div>
+
+        <!-- Debug Output -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>Debug Information</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Database Stats -->
+                    <div class="col-md-6">
+                        <h4>Database Stats</h4>
+                        <div id="dbStats" class="debug-output">
+                            Loading...
+                        </div>
+                    </div>
+                    
+                    <!-- Latest Scrape Results -->
+                    <div class="col-md-6">
+                        <h4>Latest Scrape Results</h4>
+                        <div id="scrapeResults" class="debug-output">
+                            Waiting for scrape...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -133,7 +178,74 @@ ${data.summary.categories.join('\n')}
             }
         }
 
-        loadDBStatus();
+        // Function to update database stats
+        function updateDbStats() {
+            fetch('/test')
+                .then(response => response.json())
+                .then(data => {
+                    const statsHtml = `Database Status: ${data.status}
+                    
+Counts:
+- Sailors: ${data.database_stats.sailors}
+- Races: ${data.database_stats.races}
+- Results: ${data.database_stats.results}
+- Categories: ${data.database_stats.categories}
+
+Recent Races:
+${data.recent_races.map(race => `- ${race.name} (${race.date})`).join('\n')}
+
+Categories:
+${data.categories.map(cat => `- ${cat.name}: ${cat.race_count} races`).join('\n')}`;
+                    
+                    document.getElementById('dbStats').innerText = statsHtml;
+                })
+                .catch(error => {
+                    document.getElementById('dbStats').innerText = `Error: ${error}`;
+                });
+        }
+
+        // Handle form submission
+        document.getElementById('scrapeForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const url = document.getElementById('url').value;
+            const resultsDiv = document.getElementById('scrapeResults');
+            
+            resultsDiv.innerText = 'Scraping in progress...';
+            
+            fetch('/scrape', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url: url })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultsHtml = `Scrape Completed:
+                
+URL: ${data.url_processed}
+Total Races: ${data.total_races}
+Total Results: ${data.total_results}
+Categories Found: ${data.categories.length}
+
+Categories:
+${data.categories.map(cat => `- ${cat}`).join('\n')}
+
+Time Taken: ${data.elapsed_time}
+Status: ${data.stop_reason}`;
+                
+                resultsDiv.innerText = resultsHtml;
+                
+                // Update database stats after scraping
+                updateDbStats();
+            })
+            .catch(error => {
+                resultsDiv.innerText = `Error: ${error}`;
+            });
+        });
+
+        // Update stats when page loads
+        updateDbStats();
     </script>
 </body>
 </html> 
