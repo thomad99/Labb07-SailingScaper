@@ -10,6 +10,14 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 # ✅ Create a database engine for PostgreSQL
 engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)
 
+from chatgpt_scraper import app as scraper_app
+
+# Mount scraper routes
+app.register_blueprint(scraper_app)
+
+
+
+
 @app.route("/")
 def home():
     """Load the main frontend."""
