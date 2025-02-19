@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 import openai
 import os
 
@@ -11,7 +11,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("Missing OPENAI_API_KEY. Set it in environment variables.")
 
-openai.api_key = OPENAI_API_KEY
+# ✅ Initialize OpenAI Client (Fixes Indentation Issue)
+client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 def fetch_race_results_from_chatgpt(url):
     """Fetch structured sailing race results from OpenAI and save as CSV."""
@@ -22,20 +23,16 @@ def fetch_race_results_from_chatgpt(url):
     """
 
     try:
-client = openai.OpenAI()  # New way to call OpenAI API
+        response = client.chat.completions.create(  # ✅ Correct OpenAI API Call
+            model="gpt-4-turbo",
+            messages=[
+                {"role": "system", "content": "You are a sailing race data extractor."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=2048
+        )
 
-response = client.chat.completions.create(
-    model="gpt-4-turbo",
-    messages=[
-        {"role": "system", "content": "You are a sailing race data extractor."},
-        {"role": "user", "content": prompt}
-    ],
-    max_tokens=2048
-)
-
-        
-
-        csv_data = response["choices"][0]["message"]["content"]
+        csv_data = response.choices[0].message.content  # ✅ Extract response correctly
 
         # ✅ Save CSV to a file
         file_path = "/tmp/output.csv"  # Use /tmp since it's writable on Render
@@ -46,7 +43,7 @@ response = client.chat.completions.create(
             "prompt": prompt,
             "raw_response": csv_data,
             "csv_data": csv_data,
-            "file_path": file_path  # Return the file path
+            "file_path": file_path  # ✅ Return file path
         }
     except Exception as e:
         return {"error": str(e)}
@@ -62,3 +59,12 @@ def fetch_results():
 
     debug_data = fetch_race_results_from_chatgpt(url)
     return jsonify(debug_data)
+
+@scraper_bp.route("/download-csv", methods=["GET"])
+def download_csv():
+    """Endpoint to download the saved CSV file."""
+    file_path = "/tmp/output.csv"
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True, download_name="race_results.csv")
+    else:
+        return jsonify({"error": "No CSV file found"}), 404
