@@ -71,6 +71,29 @@ class SailingRaceScraper:
         self.domain = urlparse(base_url).netloc
         self.visited_urls = set()
         self.session = SessionLocal()
+        self.should_stop = False
+        self.max_pages = 100  # Maximum pages to scrape
+        self.timeout = 3600  # Maximum runtime in seconds (1 hour)
+        self.start_time = None
+
+    def stop_scraping(self):
+        """Signal the scraper to stop"""
+        self.should_stop = True
+
+    def check_should_stop(self):
+        """Check if scraping should stop"""
+        if self.should_stop:
+            return True
+        
+        if len(self.visited_urls) >= self.max_pages:
+            print(f"Reached maximum page limit of {self.max_pages}")
+            return True
+        
+        if self.start_time and (time.time() - self.start_time) > self.timeout:
+            print(f"Reached timeout limit of {self.timeout} seconds")
+            return True
+        
+        return False
 
     def get_page(self, url):
         """Fetch page content with error handling and rate limiting"""
@@ -229,42 +252,39 @@ class SailingRaceScraper:
             return None
 
     def scrape_all_results(self):
-        """Main function to scrape all race results recursively"""
-        urls_to_visit = {self.base_url}
+        """Main function to scrape single URL"""
+        self.start_time = time.time()
+        self.should_stop = False
         total_races = 0
         total_results = 0
         categories_found = set()
         
-        while urls_to_visit:
-            current_url = urls_to_visit.pop()
-            print(f"Scraping: {current_url}")
+        print(f"Scraping URL: {self.base_url}")
+        
+        # Only scrape the single provided URL
+        html = self.get_page(self.base_url)
+        if html:
+            # Parse results from page
+            races = self.parse_race_results(html, self.base_url)
+            total_races += len(races)
             
-            html = self.get_page(current_url)
-            if html:
-                # Parse results from current page
-                races = self.parse_race_results(html, current_url)
-                total_races += len(races)
-                
-                # Count results and categories
-                for race in races:
-                    categories_found.add(race.category.name)
-                    total_results += len(race.results)
-                
-                # Find new links to follow
-                new_links = self.extract_links(html, current_url)
-                urls_to_visit.update(new_links)
-            
-            print(f"Processed {len(self.visited_urls)} pages, {len(urls_to_visit)} remaining")
+            # Count results and categories
+            for race in races:
+                categories_found.add(race.category.name)
+                total_results += len(race.results)
+        
+        # Include stop reason in summary
+        elapsed_time = time.time() - self.start_time
+        stop_reason = "Completed single page scrape"
         
         # Print final summary
         print("\n=== Scraping Summary ===")
-        print(f"Pages processed: {len(self.visited_urls)}")
+        print(f"URL processed: {self.base_url}")
         print(f"Total races found: {total_races}")
         print(f"Total race results: {total_results}")
         print(f"Race categories found: {len(categories_found)}")
         print("\nCategories:")
         for category in sorted(categories_found):
-            # Get count of results for this category
             category_results = self.session.query(RaceResult)\
                 .join(Race)\
                 .join(RaceCategory)\
@@ -273,10 +293,12 @@ class SailingRaceScraper:
             print(f"- {category}: {category_results} results")
         
         return {
-            'pages_processed': len(self.visited_urls),
+            'url_processed': self.base_url,
             'total_races': total_races,
             'total_results': total_results,
-            'categories': list(categories_found)
+            'categories': list(categories_found),
+            'elapsed_time': f"{elapsed_time:.1f} seconds",
+            'stop_reason': stop_reason
         }
 
 if __name__ == "__main__":
