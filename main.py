@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from scrape_regatta import scrape_regatta_page
 from openai_formatter import format_data_with_gpt
 from save_csv import save_to_csv
