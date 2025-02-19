@@ -8,6 +8,13 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 def format_data_with_gpt(raw_data):
     """Send extracted race data to OpenAI for formatting into CSV."""
+    
+    if not raw_data:
+        print("❌ No data provided for OpenAI to process!")
+        return "Error: No data extracted from the webpage"
+
+    print(f"🔍 Sending {len(raw_data)} rows to OpenAI for formatting")  # ✅ Debugging log
+
     prompt = f"""
     Convert the following sailing race results into a structured CSV format:
     {json.dumps(raw_data, indent=2)}
@@ -26,4 +33,6 @@ def format_data_with_gpt(raw_data):
     )
 
     csv_data = response.choices[0].message.content
+    print(f"✅ OpenAI response received ({len(csv_data)} characters)")  # ✅ Debugging log
+
     return csv_data
