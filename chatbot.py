@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from openai import OpenAI
+from openai import OpenAI  # Import the client class
 from typing import Optional
 from database import engine, SessionLocal
 
@@ -20,20 +20,18 @@ if not OPENAI_API_KEY:
 
 print(f"API Key found: {'Yes' if OPENAI_API_KEY else 'No'}")  # Debug print
 
-# Initialize OpenAI client
+# Initialize OpenAI client with minimal configuration
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Test the connection
 try:
-    client = OpenAI(
-        api_key=OPENAI_API_KEY
-    )
-    # Test the connection immediately
     test_response = client.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": "test"}],
-        max_tokens=5
+        messages=[{"role": "user", "content": "test"}]
     )
-    print("OpenAI client initialized successfully")
+    print("OpenAI connection test successful")
 except Exception as e:
-    print(f"Error initializing OpenAI client: {str(e)}")
+    print(f"OpenAI connection test failed: {str(e)}")
     raise
 
 class Query(BaseModel):
@@ -46,8 +44,7 @@ async def health_check():
         # Test OpenAI connection
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": "test"}],
-            max_tokens=5
+            messages=[{"role": "user", "content": "test"}]
         )
         return {
             "status": "healthy",
