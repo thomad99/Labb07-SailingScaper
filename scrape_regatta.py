@@ -1,6 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+import chromedriver_autoinstaller
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 import time
@@ -9,15 +10,19 @@ def scrape_regatta_page(url):
     """Use Selenium to scrape dynamically loaded race results."""
     print(f"🔍 Fetching URL: {url} using Selenium")
 
-    # ✅ Set up Selenium WebDriver
+    # ✅ Ensure Chrome is installed
+    chromedriver_autoinstaller.install()
+
+    # ✅ Set up Selenium WebDriver in headless mode
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")  # Run without opening a browser
+    options.add_argument("--no-sandbox")  # Required for running in Docker
+    options.add_argument("--disable-dev-shm-usage")  # Prevent crashes
     options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+
     driver.get(url)
     time.sleep(5)  # ✅ Wait for JavaScript to load
 
